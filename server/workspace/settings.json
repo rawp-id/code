@@ -1,0 +1,10 @@
+{
+  "editor": {
+    "tabSize": 2,
+    "insertSpaces": true,
+    "fontSize": 14
+  },
+  "textTools": {
+    "greeting": "Hello from settings.json"
+  }
+}

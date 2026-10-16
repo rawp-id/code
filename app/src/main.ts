@@ -194,6 +194,27 @@ bus.on("panel.toggle", () => togglePanel());
 bus.on("sidebar.toggle", () => layout.sidebar.classList.toggle("hidden"));
 editor.onDidChange(renderStatus);
 
+const toUri = (filePath: string) =>
+  filePath.startsWith("file://") ? filePath : `file://${filePath}`;
+const fromUri = (uri: string) => uri.replace(/^file:\/\//, "");
+
+bus.on("editor.open", ({ path, languageId, text }) =>
+  bridge.request("doc.open", { uri: toUri(path), languageId, text })
+);
+bus.on("editor.change", ({ path, text }) => bridge.request("doc.change", { uri: toUri(path), text }));
+bus.on("editor.saved", ({ path }) => bridge.request("doc.save", { uri: toUri(path) }));
+bus.on("editor.active", ({ path }) => bridge.request("doc.active", { uri: toUri(path) }));
+bus.on("editor.close", ({ path }) => bridge.request("doc.close", { uri: toUri(path) }));
+bus.on("editor.selection", ({ path, selection }) =>
+  bridge.request("doc.selection", { uri: toUri(path), selection })
+);
+
+bridge.handleRequest("editor.applyEdits", (params) => editor.applyEdits(params.uri, params.edits));
+bridge.handleRequest("editor.saveDocument", (params) =>
+  editor.saveDocument(fromUri(params.uri))
+);
+bridge.handleRequest("editor.showDocument", (params) => editor.showDocument(fromUri(params.uri)));
+
 document.addEventListener("keydown", (event) => {
   const mod = event.ctrlKey || event.metaKey;
   if (mod && event.shiftKey && event.key.toLowerCase() === "p") {

@@ -1,7 +1,19 @@
-import { promises as fs } from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { createRequire } from "node:module";
+import {
+  TextDocumentImpl,
+  TextEditorImpl,
+  pathToUri,
+  toPosition,
+  toRange,
+  uriToPath,
+  type DocEntry,
+  type Range,
+  type Selection,
+  type TextEdit,
+} from "./documents.js";
 
 export interface ExtensionCommand {
   command: string;
@@ -20,7 +32,6 @@ export interface ExtensionInfo {
   commands: ExtensionCommand[];
 }
 
-/** Everything an extension can reach back to in the UI. */
 export interface UiBridge {
   showMessage(
     kind: "info" | "warning" | "error",
@@ -31,6 +42,26 @@ export interface UiBridge {
   showInputBox(options?: any): Promise<string | undefined>;
   output(channel: string, line: string): void;
   executeCommand(command: string, ...args: any[]): Promise<any>;
+  applyEdits(uri: string, edits: TextEdit[]): Promise<boolean>;
+  saveDocument(uri: string): Promise<boolean>;
+  showDocument(uri: string): Promise<boolean>;
+}
+
+class Emitter {
+  private listeners = new Set<(event: any) => void>();
+
+  event = (listener: (event: any) => void) => {
+    this.listeners.add(listener);
+    return { dispose: () => this.listeners.delete(listener) };
+  };
+
+  fire(value?: any): void {
+    for (const listener of [...this.listeners]) listener(value);
+  }
+
+  clear(): void {
+    this.listeners.clear();
+  }
 }
 
 class Memento {
@@ -47,12 +78,50 @@ class Memento {
   }
 }
 
+class WorkspaceEdit {
+  private map = new Map<string, TextEdit[]>();
+
+  replace(uri: any, range: Range, newText: string): void {
+    this.push(uri, { range: toRange(range), newText });
+  }
+  insert(uri: any, position: any, newText: string): void {
+    const point = toPosition(position);
+    this.push(uri, { range: { start: point, end: { ...point } }, newText });
+  }
+  delete(uri: any, range: Range): void {
+    this.push(uri, { range: toRange(range), newText: "" });
+  }
+  get(uri: any): TextEdit[] {
+    return this.map.get(uriKey(uri)) ?? [];
+  }
+  entries(): [string, TextEdit[]][] {
+    return [...this.map.entries()];
+  }
+  get size(): number {
+    return this.map.size;
+  }
+
+  private push(uri: any, edit: TextEdit): void {
+    const key = uriKey(uri);
+    const list = this.map.get(key) ?? [];
+    list.push(edit);
+    this.map.set(key, list);
+  }
+}
+
+function uriKey(uri: any): string {
+  if (!uri) return "";
+  if (typeof uri === "string") return uri;
+  if (typeof uri.toString === "function") return uri.toString();
+  return String(uri);
+}
+
 /**
  * Minimal VS Code extension host.
  *
- * Extensions are CommonJS bundles (what `vsce package` produces). We load them
- * inside a `vm` wrapper that injects a `vscode` shim, so `require('vscode')`
- * resolves to our host implementation instead of Node's resolver.
+ * Extensions are CommonJS bundles loaded inside a `vm` wrapper that injects a
+ * `vscode` shim, so `require('vscode')` resolves to this host. Builtin modules
+ * (fs, path, ...) still resolve through Node's normal loader.
  */
 export class ExtensionHost {
   readonly commands = new Map<
@@ -63,8 +132,29 @@ export class ExtensionHost {
   private extensions = new Map<string, ExtensionInfo & { manifest: any; dir: string }>();
   private activated = new Set<string>();
   private activatedExports = new Map<string, any>();
+  private contexts = new Map<string, { subscriptions: { dispose(): void }[] }>();
+  private scanned = false;
 
-  constructor(private dir: string, private ui: UiBridge) {}
+  private documents = new Map<string, DocEntry>();
+  private activeUri: string | null = null;
+  private selection: Selection = emptySelection();
+
+  private emitters = {
+    open: new Emitter(),
+    change: new Emitter(),
+    save: new Emitter(),
+    close: new Emitter(),
+    active: new Emitter(),
+    selection: new Emitter(),
+  };
+
+  constructor(
+    private dir: string,
+    public workspaceRoot: string,
+    private ui: UiBridge
+  ) {}
+
+  // ---- extension lifecycle ------------------------------------------------
 
   async scan(): Promise<ExtensionInfo[]> {
     this.extensions.clear();
@@ -72,6 +162,7 @@ export class ExtensionHost {
     try {
       entries = await fs.readdir(this.dir);
     } catch {
+      this.scanned = true;
       return [];
     }
     for (const name of entries) {
@@ -100,6 +191,7 @@ export class ExtensionHost {
         /* not an extension folder */
       }
     }
+    this.scanned = true;
     return this.list();
   }
 
@@ -111,22 +203,21 @@ export class ExtensionHost {
   }
 
   async activate(id: string): Promise<ExtensionInfo | null> {
+    if (!this.scanned) await this.scan();
     const ext = this.extensions.get(id);
     if (!ext) return null;
-    if (this.activated.has(id)) {
-      return this.list().find((e) => e.id === id) || null;
-    }
+    if (this.activated.has(id)) return this.list().find((e) => e.id === id) || null;
 
     const mainRel = ext.main || "./extension.js";
     const mainPath = path.join(ext.dir, mainRel);
     const context = this.createContext(ext);
     const vscode = this.createShim(ext, context);
+    this.contexts.set(id, context);
 
     try {
       const code = await fs.readFile(mainPath, "utf8");
       const extRequire = createRequire(mainPath);
-      const requireFn = (name: string) =>
-        name === "vscode" ? vscode : extRequire(name);
+      const requireFn = (name: string) => (name === "vscode" ? vscode : extRequire(name));
       const wrapper = `(function (exports, require, module, __filename, __dirname) {${code}\n})`;
       const fn = vm.runInThisContext(wrapper, { filename: mainPath });
       const moduleObj = { exports: {} as any };
@@ -149,14 +240,162 @@ export class ExtensionHost {
     if (typeof exportsObj?.deactivate === "function") {
       await exportsObj.deactivate();
     }
+    const context = this.contexts.get(id);
+    if (context) {
+      for (const subscription of context.subscriptions) {
+        try {
+          subscription.dispose();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    this.contexts.delete(id);
     this.activated.delete(id);
     this.activatedExports.delete(id);
   }
 
   async executeCommand(command: string, args: any[] = []): Promise<any> {
-    const entry = this.commands.get(command);
+    if (!this.scanned) await this.scan();
+    let entry = this.commands.get(command);
+    if (!entry) {
+      // VS Code activates the owning extension on demand; do the same.
+      const owner = [...this.extensions.values()].find((ext) =>
+        ext.commands.some((c) => c.command === command)
+      );
+      if (owner) {
+        await this.activate(owner.id);
+        entry = this.commands.get(command);
+      }
+    }
     if (!entry) throw new Error(`Unknown command: ${command}`);
     return entry.handler(...args);
+  }
+
+  // ---- document model -----------------------------------------------------
+
+  openDocument(uri: string, languageId: string, text: string): void {
+    let entry = this.documents.get(uri);
+    if (entry) {
+      entry.text = text;
+      entry.languageId = languageId;
+      entry.version += 1;
+    } else {
+      entry = { uri, languageId, version: 1, text, dirty: false };
+      this.documents.set(uri, entry);
+    }
+    this.emitters.open.fire(this.makeDocument(entry));
+  }
+
+  changeDocument(uri: string, text: string): void {
+    let entry = this.documents.get(uri);
+    if (!entry) {
+      this.openDocument(uri, languageForPath(uriToPath(uri)), text);
+      entry = this.documents.get(uri)!;
+    }
+    entry.text = text;
+    entry.version += 1;
+    entry.dirty = true;
+    this.emitters.change.fire({
+      document: this.makeDocument(entry),
+      contentChanges: [{ text }],
+      reason: undefined,
+    });
+  }
+
+  saveDocument(uri: string): void {
+    const entry = this.documents.get(uri);
+    if (!entry) return;
+    entry.dirty = false;
+    this.emitters.save.fire(this.makeDocument(entry));
+  }
+
+  closeDocument(uri: string): void {
+    const entry = this.documents.get(uri);
+    if (!entry) return;
+    this.emitters.close.fire(this.makeDocument(entry));
+    this.documents.delete(uri);
+    if (this.activeUri === uri) this.setActiveDocument(null);
+  }
+
+  setActiveDocument(uri: string | null): void {
+    if (this.activeUri === uri) return;
+    this.activeUri = uri;
+    this.emitters.active.fire(this.activeTextEditor());
+  }
+
+  setSelection(uri: string, selection: Selection): void {
+    if (this.activeUri !== uri) this.setActiveDocument(uri);
+    this.selection = selection;
+    this.emitters.selection.fire({
+      textEditor: this.activeTextEditor(),
+      selections: [selection],
+      kind: 1,
+    });
+  }
+
+  activeTextEditor(): TextEditorImpl | undefined {
+    if (!this.activeUri) return undefined;
+    const entry = this.documents.get(this.activeUri);
+    if (!entry) return undefined;
+    return this.makeEditor(entry);
+  }
+
+  listDocuments(): TextDocumentImpl[] {
+    return [...this.documents.values()].map((entry) => this.makeDocument(entry));
+  }
+
+  async openTextDocument(uriOrPath: string): Promise<TextDocumentImpl> {
+    const uri = uriOrPath.startsWith("file://") ? uriOrPath : pathToUri(uriOrPath);
+    let entry = this.documents.get(uri);
+    if (!entry) {
+      const text = await fs.readFile(uriToPath(uri), "utf8");
+      entry = { uri, languageId: languageForPath(uriToPath(uri)), version: 1, text, dirty: false };
+      this.documents.set(uri, entry);
+      this.emitters.open.fire(this.makeDocument(entry));
+    }
+    return this.makeDocument(entry);
+  }
+
+  async applyWorkspaceEdit(edit: WorkspaceEdit): Promise<boolean> {
+    for (const [uri, edits] of edit.entries()) {
+      await this.ui.applyEdits(uri, edits);
+    }
+    return true;
+  }
+
+  async showDocument(value: any): Promise<TextEditorImpl | undefined> {
+    const uri = typeof value === "string" ? pathToUri(value) : uriKey(value?.uri ?? value);
+    if (!uri) return undefined;
+    await this.ui.showDocument(uri);
+    this.setActiveDocument(uri);
+    return this.activeTextEditor();
+  }
+
+  readSettings(): Record<string, any> {
+    try {
+      return JSON.parse(readFileSync(path.join(this.workspaceRoot, "settings.json"), "utf8"));
+    } catch {
+      return {};
+    }
+  }
+
+  // ---- vscode shim --------------------------------------------------------
+
+  private makeDocument(entry: DocEntry): TextDocumentImpl {
+    return new TextDocumentImpl(entry, async (uri) => {
+      const ok = await this.ui.saveDocument(uri);
+      this.saveDocument(uri);
+      return ok;
+    });
+  }
+
+  private makeEditor(entry: DocEntry): TextEditorImpl {
+    return new TextEditorImpl(
+      this.makeDocument(entry),
+      () => this.selection,
+      async (uri, edits) => this.ui.applyEdits(uri, edits)
+    );
   }
 
   private createContext(ext: ExtensionInfo & { dir: string }) {
@@ -189,13 +428,25 @@ export class ExtensionHost {
   private createShim(ext: ExtensionInfo, context: any): any {
     const host = this;
     const ui = this.ui;
+
+    const TextEditFactory = class {
+      static replace(range: Range, newText: string): TextEdit {
+        return { range: toRange(range), newText };
+      }
+      static insert(position: any, newText: string): TextEdit {
+        const point = toPosition(position);
+        return { range: { start: point, end: { ...point } }, newText };
+      }
+      static delete(range: Range): TextEdit {
+        return { range: toRange(range), newText: "" };
+      }
+    };
+
     return {
       version: "1.90.0",
       commands: {
         registerCommand(command: string, handler: (...args: any[]) => any) {
-          const disposable = {
-            dispose: () => host.commands.delete(command),
-          };
+          const disposable = { dispose: () => host.commands.delete(command) };
           host.commands.set(command, { title: command, extension: ext.id, handler });
           context.subscriptions.push(disposable);
           return disposable;
@@ -211,6 +462,15 @@ export class ExtensionHost {
         },
       },
       window: {
+        get activeTextEditor() {
+          return host.activeTextEditor();
+        },
+        get visibleTextEditors() {
+          const editor = host.activeTextEditor();
+          return editor ? [editor] : [];
+        },
+        onDidChangeActiveTextEditor: host.emitters.active.event,
+        onDidChangeTextEditorSelection: host.emitters.selection.event,
         showInformationMessage: (message: string, ...rest: any[]) =>
           ui.showMessage("info", message, stringItems(rest)),
         showWarningMessage: (message: string, ...rest: any[]) =>
@@ -219,72 +479,88 @@ export class ExtensionHost {
           ui.showMessage("error", message, stringItems(rest)),
         showQuickPick: (items: any[], options?: any) => ui.showQuickPick(items, options),
         showInputBox: (options?: any) => ui.showInputBox(options),
+        showTextDocument: (value: any) => host.showDocument(value),
         createOutputChannel(name: string) {
-          return {
-            name,
-            append: (line: string) => ui.output(name, String(line)),
-            appendLine: (line: string) => ui.output(name, String(line)),
-            replace: (line: string) => ui.output(name, String(line)),
-            show() {},
-            hide() {},
-            clear() {},
-            dispose() {},
-          };
+          return outputChannel(name);
         },
         createStatusBarItem() {
-          return {
-            text: "",
-            tooltip: "",
-            command: undefined,
-            show() {},
-            hide() {},
-            dispose() {},
-          };
+          return { text: "", tooltip: "", command: undefined, show() {}, hide() {}, dispose() {} };
         },
-        activeTextEditor: undefined,
-        visibleTextEditors: [] as any[],
-        onDidChangeActiveTextEditor: () => ({ dispose() {} }),
-        onDidChangeTextEditorSelection: () => ({ dispose() {} }),
-        showTextDocument: async () => undefined as any,
-        withProgress: async (_opts: any, task: any) => task({ report: () => {} }, { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) }),
+        withProgress: async (_options: any, task: any) =>
+          task({ report: () => {} }, { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) }),
       },
       workspace: {
-        name: ext.name,
-        workspaceFolders: undefined,
-        rootPath: ext.dir,
+        get name() {
+          return ext.name;
+        },
+        get rootPath() {
+          return host.workspaceRoot;
+        },
+        get workspaceFolders() {
+          return [
+            {
+              uri: uriFromPath(host.workspaceRoot),
+              name: path.basename(host.workspaceRoot),
+              index: 0,
+            },
+          ];
+        },
+        get textDocuments() {
+          return host.listDocuments();
+        },
+        onDidOpenTextDocument: host.emitters.open.event,
+        onDidChangeTextDocument: host.emitters.change.event,
+        onDidSaveTextDocument: host.emitters.save.event,
+        onDidCloseTextDocument: host.emitters.close.event,
+        onDidChangeConfiguration: () => ({ dispose() {} }),
+        onDidChangeWorkspaceFolders: () => ({ dispose() {} }),
         getConfiguration(section?: string) {
+          const settings = host.readSettings();
+          const scoped = section ? getPath(settings, section, {}) : settings;
           return {
-            get: (_key: string, fallback?: any) => fallback,
-            has: () => false,
+            get: (key: string, fallback?: any) => {
+              const value = getPath(scoped, key, undefined);
+              return value === undefined ? fallback : value;
+            },
+            has: (key: string) => getPath(scoped, key, undefined) !== undefined,
             update: async () => undefined,
             inspect: () => undefined,
           };
         },
         fs: {
-          readFile: async (_uri: any) => new Uint8Array(),
-          writeFile: async (_uri: any, _content: any) => undefined,
-          stat: async (_uri: any) => ({}) as any,
-          readDirectory: async (_uri: any) => [],
-          createDirectory: async (_uri: any) => undefined,
+          readFile: async (uri: any) => {
+            const buffer = await fs.readFile(uriToPath(uriKey(uri)));
+            return new Uint8Array(buffer);
+          },
+          writeFile: async (uri: any, content: Uint8Array) => {
+            await fs.writeFile(uriToPath(uriKey(uri)), content);
+          },
+          stat: async (uri: any) => {
+            const info = await fs.stat(uriToPath(uriKey(uri)));
+            return { type: info.isDirectory() ? 2 : 1, ctime: info.ctimeMs, mtime: info.mtimeMs, size: info.size };
+          },
+          readDirectory: async (uri: any) => {
+            const entries = await fs.readdir(uriToPath(uriKey(uri)), { withFileTypes: true });
+            return entries.map((item) => [item.name, item.isDirectory() ? 2 : 1]);
+          },
+          createDirectory: async (uri: any) => {
+            await fs.mkdir(uriToPath(uriKey(uri)), { recursive: true });
+          },
         },
-        onDidChangeTextDocument: () => ({ dispose() {} }),
-        onDidSaveTextDocument: () => ({ dispose() {} }),
-        onDidOpenTextDocument: () => ({ dispose() {} }),
-        openTextDocument: async () => ({}) as any,
+        applyEdit: (edit: WorkspaceEdit) => host.applyWorkspaceEdit(edit),
+        openTextDocument: (uriOrPath: string) => host.openTextDocument(uriOrPath),
         findFiles: async () => [],
-        asRelativePath: (p: string) => p,
+        asRelativePath: (value: any) => {
+          const filePath = typeof value === "string" ? value : uriToPath(uriKey(value));
+          return path.relative(host.workspaceRoot, filePath);
+        },
       },
       languages: {
         registerCompletionItemProvider: () => ({ dispose() {} }),
         registerHoverProvider: () => ({ dispose() {} }),
         registerCodeActionsProvider: () => ({ dispose() {} }),
         registerDocumentFormattingEditProvider: () => ({ dispose() {} }),
-        createDiagnosticCollection: () => ({
-          set() {},
-          delete() {},
-          clear() {},
-          dispose() {},
-        }),
+        createDiagnosticCollection: () => ({ set() {}, delete() {}, clear() {}, dispose() {} }),
         match: () => 0,
       },
       env: {
@@ -306,6 +582,9 @@ export class ExtensionHost {
       },
       StatusBarAlignment: { Left: 1, Right: 2 },
       ViewColumn: { Active: -1, One: 1, Two: 2 },
+      TextEditorRevealType: { Default: 0, InCenter: 1, AtTop: 2 },
+      EndOfLine: { LF: 1, CRLF: 2 },
+      ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
       CompletionItemKind: {
         Text: 0,
         Method: 1,
@@ -333,6 +612,21 @@ export class ExtensionHost {
       Range: class Range {
         constructor(public start: any, public end: any) {}
       },
+      Selection: class Selection {
+        constructor(
+          public anchor: any,
+          public active: any
+        ) {}
+        get start() {
+          return comparePositions(this.anchor, this.active) <= 0 ? this.anchor : this.active;
+        }
+        get end() {
+          return comparePositions(this.anchor, this.active) <= 0 ? this.active : this.anchor;
+        }
+        get isEmpty() {
+          return this.anchor.line === this.active.line && this.anchor.character === this.active.character;
+        }
+      },
       Location: class Location {
         constructor(public uri: any, public range: any) {}
       },
@@ -342,6 +636,8 @@ export class ExtensionHost {
       Hover: class Hover {
         constructor(public contents: any, public range?: any) {}
       },
+      WorkspaceEdit,
+      TextEdit: TextEditFactory,
       MarkdownString: class MarkdownString {
         constructor(public value = "") {}
         appendText(v: string) {
@@ -372,26 +668,81 @@ export class ExtensionHost {
           this.callOnDispose();
         }
         static from(...items: { dispose(): void }[]) {
-          return new (class {
-            dispose() {
-              for (const item of items) item.dispose();
-            }
-          })();
+          return { dispose: () => items.forEach((item) => item.dispose()) };
         }
       },
     };
+
+    function outputChannel(name: string) {
+      return {
+        name,
+        append: (line: string) => ui.output(name, String(line)),
+        appendLine: (line: string) => ui.output(name, String(line)),
+        replace: (line: string) => ui.output(name, String(line)),
+        show() {},
+        hide() {},
+        clear() {},
+        dispose() {},
+      };
+    }
   }
 }
 
-function uriFromPath(p: string) {
+function uriFromPath(filePath: string) {
   return {
     scheme: "file",
-    fsPath: p,
-    path: p,
-    toString: () => "file://" + p,
+    fsPath: filePath,
+    path: filePath,
+    toString: () => pathToUri(filePath),
   };
 }
 
 function stringItems(rest: any[]): string[] {
   return rest.filter((r) => typeof r === "string");
+}
+
+function comparePositions(a: { line: number; character: number }, b: { line: number; character: number }): number {
+  return a.line - b.line || a.character - b.character;
+}
+
+function getPath(object: any, dotted: string, fallback: any): any {
+  if (!dotted) return object ?? fallback;
+  let current = object;
+  for (const key of dotted.split(".")) {
+    if (current == null || typeof current !== "object") return fallback;
+    current = current[key];
+    if (current === undefined) return fallback;
+  }
+  return current;
+}
+
+function emptySelection(): Selection {
+  const point = { line: 0, character: 0 };
+  return { start: point, end: { ...point }, anchor: { ...point }, active: { ...point }, isEmpty: true };
+}
+
+function languageForPath(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const map: Record<string, string> = {
+    ".js": "javascript",
+    ".jsx": "javascriptreact",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
+    ".ts": "typescript",
+    ".tsx": "typescriptreact",
+    ".json": "json",
+    ".html": "html",
+    ".htm": "html",
+    ".css": "css",
+    ".scss": "scss",
+    ".md": "markdown",
+    ".py": "python",
+    ".rs": "rust",
+    ".go": "go",
+    ".java": "java",
+    ".sh": "shellscript",
+    ".yml": "yaml",
+    ".yaml": "yaml",
+  };
+  return map[ext] || "plaintext";
 }

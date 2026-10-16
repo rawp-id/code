@@ -176,6 +176,9 @@ export class EditorManager {
       bus.emit("editor.change", { path, text });
       if (changed) this.fire();
     }
+    if (update.selectionSet || update.docChanged) {
+      bus.emit("editor.selection", { path, selection: selectionOf(update.state) });
+    }
   }
 
   async open(path: string): Promise<void> {
@@ -236,6 +239,37 @@ export class EditorManager {
     bus.emit("editor.saved", { path: target });
   }
 
+  async saveDocument(path: string): Promise<boolean> {
+    await this.save(path);
+    return true;
+  }
+
+  showDocument(path: string): boolean {
+    if (this.docs.has(path)) {
+      this.activate(path);
+      return true;
+    }
+    this.open(path).catch(() => undefined);
+    return true;
+  }
+
+  applyEdits(uri: string, edits: any[]): boolean {
+    const path = uri.replace(/^file:\/\//, "");
+    if (!this.docs.has(path)) return false;
+    if (this.active !== path) this.activate(path);
+    const state = this.view.state;
+    const changes = (edits || [])
+      .map((edit) => ({
+        from: offsetOf(state, edit.range.start),
+        to: offsetOf(state, edit.range.end),
+        insert: edit.newText,
+      }))
+      .sort((a, b) => b.from - a.from);
+    if (changes.length === 0) return true;
+    this.view.dispatch({ changes });
+    return true;
+  }
+
   private async complete(path: string, context: CompletionContext): Promise<any> {
     const word = context.matchBefore(/[\w$#-]*/);
     if (!word) return null;
@@ -277,4 +311,21 @@ function offsetOf(state: EditorState, position: { line: number; character: numbe
   const lineNumber = Math.min(Math.max(position.line + 1, 1), state.doc.lines);
   const line = state.doc.line(lineNumber);
   return Math.min(line.from + position.character, line.to);
+}
+
+function selectionOf(state: EditorState) {
+  const main = state.selection.main;
+  const positionAt = (offset: number) => {
+    const line = state.doc.lineAt(offset);
+    return { line: line.number - 1, character: offset - line.from };
+  };
+  const anchor = positionAt(main.anchor);
+  const active = positionAt(main.head);
+  return {
+    anchor,
+    active,
+    start: positionAt(main.from),
+    end: positionAt(main.to),
+    isEmpty: main.empty,
+  };
 }

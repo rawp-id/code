@@ -17,8 +17,10 @@ server/   Node process: workspace FS, terminal (pty), extension host, LSP
 - Integrated terminal (`Ctrl+`` `) backed by a pty (Node `child_process`
   fallback when `node-pty` cannot build).
 - **Extension host** that loads CommonJS VS Code extensions and serves a
-  `vscode` API shim (commands, window messages, input box, quick pick, output
-  channels).
+  `vscode` API shim with a real text document model, text edits, workspace
+  edits, events, and on-demand activation.
+- **Settings** read from `settings.json` at the workspace root via
+  `workspace.getConfiguration()`.
 - **Language server** over LSP: diagnostics, completion, and generic requests.
   Ships with `server/lsp-servers/demo-lsp.mjs` so the pipeline works out of the
   box; swap it for a real server in `server/src/lsp/manager.ts`.
@@ -50,18 +52,27 @@ or use **Workspace: Open Folder…** from the command palette.
 
 Drop a folder in `server/extensions/` containing a `package.json` (with
 `contributes.commands`) and a CommonJS `main` (e.g. `extension.js`) that calls
-`require('vscode')`. See `server/extensions/hello` and
-`server/extensions/word-count` for working examples.
+`require('vscode')`. Extensions activate **on demand**: running one of their
+commands (from the palette or the Extensions sidebar) activates the owning
+extension automatically, matching `activationEvents`.
+
+Working examples:
+
+- `hello` — messages, input box, quick pick, output channel.
+- `word-count` — reads a file with Node `fs`.
+- `text-tools` — document model, `TextEditor.edit`, `WorkspaceEdit`,
+  `onDidChangeTextDocument` / `onDidSaveTextDocument` / selection events.
 
 The shim currently supports:
 
 | Namespace | Supported |
 | --- | --- |
 | `commands` | `registerCommand`, `executeCommand`, `getCommands` |
-| `window` | info/warning/error messages, `showQuickPick`, `showInputBox`, `createOutputChannel`, `createStatusBarItem` |
-| `workspace` | `getConfiguration`, `workspaceFolders`, `fs` (stubs) |
+| `window` | active editor, messages, `showQuickPick`, `showInputBox`, `showTextDocument`, `createOutputChannel`, selection/active-editor events |
+| `workspace` | `textDocuments`, `getConfiguration` (from `settings.json`), `workspaceFolders`, `applyEdit`, `openTextDocument`, `onDidOpen/Change/Save/CloseTextDocument`, `fs` |
 | `languages` | registration stubs, `createDiagnosticCollection` |
-| misc | `Uri`, `EventEmitter`, `Diagnostic`, `Position`, `Range`, `CompletionItem`, … |
+| text model | `TextDocument` (getText, lineAt, offsetAt, positionAt, save), `TextEditor.edit`, `WorkspaceEdit`, `TextEdit` |
+| misc | `Uri`, `EventEmitter`, `Selection`, `Diagnostic`, `Position`, `Range`, `CompletionItem`, `WorkspaceEdit`, … |
 
 Extensions run inside a `vm` wrapper with `require('vscode')` replaced by the
 shim; `require('fs')`, `require('path')`, and other Node builtins work normally.
@@ -75,7 +86,8 @@ behind the same interface.
 
 ## Next steps
 
-1. Grow the `vscode` shim (text edits, document events, `languages` providers).
+1. Connect `languages.*` providers (completion, hover, diagnostics) to the
+   editor, alongside the LSP client.
 2. Configurable LSP servers per language (`lsp.config.json`).
 3. Wrap the web app with Capacitor and add native plugins (`PtyPlugin`,
    `FsPlugin`, `ExecPlugin`) behind the same bridge protocol.

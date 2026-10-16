@@ -50,9 +50,21 @@ export function handleConnection(ws: WebSocket): void {
       callClient("ui.showInputBox", { options }).catch(() => undefined),
     output: (channel, line) => event("output.line", { channel, line }),
     executeCommand: (command, ...args) => host.executeCommand(command, args),
+    applyEdits: (uri, edits) =>
+      callClient("editor.applyEdits", { uri, edits })
+        .then((result) => result !== false)
+        .catch(() => false),
+    saveDocument: (uri) =>
+      callClient("editor.saveDocument", { uri })
+        .then((result) => result !== false)
+        .catch(() => false),
+    showDocument: (uri) =>
+      callClient("editor.showDocument", { uri })
+        .then((result) => result !== false)
+        .catch(() => false),
   };
 
-  const host = new ExtensionHost(EXTENSIONS_DIR, ui);
+  const host = new ExtensionHost(EXTENSIONS_DIR, workspace.root, ui);
 
   const methods: Record<string, (params: any) => any> = {
     "server.info": async () => ({
@@ -65,6 +77,7 @@ export function handleConnection(ws: WebSocket): void {
     "ws.info": () => workspace.info(),
     "ws.setRoot": async ({ root }: { root: string }) => {
       workspace.root = path.resolve(root);
+      host.workspaceRoot = workspace.root;
       return workspace.info();
     },
 
@@ -76,6 +89,38 @@ export function handleConnection(ws: WebSocket): void {
     "fs.mkdir": ({ path: rel }: { path: string }) => workspace.mkdir(rel),
     "fs.rename": ({ from, to }: { from: string; to: string }) => workspace.rename(from, to),
     "fs.delete": ({ path: rel }: { path: string }) => workspace.delete(rel),
+
+    "doc.open": ({ uri, languageId, text }: { uri: string; languageId: string; text: string }) => {
+      host.openDocument(uri, languageId, text);
+      return true;
+    },
+    "doc.change": ({ uri, text }: { uri: string; text: string }) => {
+      host.changeDocument(uri, text);
+      return true;
+    },
+    "doc.save": ({ uri }: { uri: string }) => {
+      host.saveDocument(uri);
+      return true;
+    },
+    "doc.close": ({ uri }: { uri: string }) => {
+      host.closeDocument(uri);
+      return true;
+    },
+    "doc.active": ({ uri }: { uri: string }) => {
+      host.setActiveDocument(uri);
+      return true;
+    },
+    "doc.selection": ({ uri, selection }: any) => {
+      host.setSelection(uri, selection);
+      return true;
+    },
+    "doc.list": () =>
+      host.listDocuments().map((document) => ({
+        uri: document.uri,
+        languageId: document.languageId,
+        version: document.version,
+        isDirty: document.isDirty,
+      })),
 
     "pty.spawn": ({ cols, rows, shell }: { cols: number; rows: number; shell?: string }) =>
       pty
