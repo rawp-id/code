@@ -240,13 +240,32 @@ const toUri = (filePath: string) =>
   filePath.startsWith("file://") ? filePath : `file://${filePath}`;
 const fromUri = (uri: string) => uri.replace(/^file:\/\//, "");
 
-bus.on("editor.open", ({ path, languageId, text }) =>
-  bridge.request("doc.open", { uri: toUri(path), languageId, text })
-);
-bus.on("editor.change", ({ path, text }) => bridge.request("doc.change", { uri: toUri(path), text }));
+bus.on("editor.open", ({ path, languageId, text }) => {
+  const uri = toUri(path);
+  bridge.request("doc.open", { uri, languageId, text });
+  bridge.request("lsp.didOpen", { uri, languageId, text });
+});
+let changeTimer: number | undefined;
+const pendingChanges = new Map<string, string>();
+bus.on("editor.change", ({ path, text }) => {
+  pendingChanges.set(path, text);
+  window.clearTimeout(changeTimer);
+  changeTimer = window.setTimeout(() => {
+    for (const [changedPath, changedText] of pendingChanges) {
+      const uri = toUri(changedPath);
+      bridge.request("doc.change", { uri, text: changedText });
+      bridge.request("lsp.didChange", { uri, text: changedText });
+    }
+    pendingChanges.clear();
+  }, 120);
+});
 bus.on("editor.saved", ({ path }) => bridge.request("doc.save", { uri: toUri(path) }));
 bus.on("editor.active", ({ path }) => bridge.request("doc.active", { uri: toUri(path) }));
-bus.on("editor.close", ({ path }) => bridge.request("doc.close", { uri: toUri(path) }));
+bus.on("editor.close", ({ path }) => {
+  const uri = toUri(path);
+  bridge.request("doc.close", { uri });
+  bridge.request("lsp.didClose", { uri });
+});
 bus.on("editor.selection", ({ path, selection }) =>
   bridge.request("doc.selection", { uri: toUri(path), selection })
 );
