@@ -158,6 +158,11 @@ EDITOR_WORKSPACE=/storage/emulated/0/Projects ./start.sh
 Finally, in the app open **Connection: Set Server URL…** and enter
 `ws://127.0.0.1:3177/ws`. Extensions, LSP and the terminal now run on the phone.
 
+Once the bundle is in place, **Server: Start in Termux…** from the palette can
+launch `./start.sh` for you and points the app at `127.0.0.1:3177`. Termux must
+allow external apps: set `allow-external-apps=true` in
+`~/.termux/termux.properties`.
+
 Notes:
 
 - The bundled server uses a plain shell fallback because `node-pty` is not
@@ -166,7 +171,8 @@ Notes:
 - To build a fully self-contained APK, bundle `node`/`proot` as `lib*.so` in
   `jniLibs` and add a `forkpty` JNI plugin, then start the server from a small
   Capacitor plugin instead of Termux. The server and bridge protocol stay the
-  same.
+  same. `ServerPlugin.java` already shows how a native plugin is registered and
+  called from the web UI.
 
 ## Next steps
 

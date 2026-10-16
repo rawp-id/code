@@ -7,6 +7,7 @@ import { TabsView } from "./tabs";
 import { FileTree, ExtensionsView } from "./sidebar";
 import { CommandPalette, showInputBox, showQuickPick, type Command } from "./palette";
 import { initConnectionUi, openConnectionDialog } from "./connect";
+import { isNativePlatform, KodeServer } from "./native";
 import { TerminalPanel } from "./terminal";
 import { toast } from "./toast";
 import { languageLabel } from "./lang";
@@ -193,6 +194,36 @@ const builtinCommands: Command[] = [
   { id: "ext.all", title: "Extensions: Show All", run: () => { layout.sidebar.classList.remove("hidden"); setSidebarView("extensions"); } },
   { id: "workspace.open", title: "Workspace: Open Folder…", run: () => openFolder() },
   { id: "connection.url", title: "Connection: Set Server URL…", run: () => openConnectionDialog() },
+  {
+    id: "server.termux",
+    title: "Server: Start in Termux…",
+    run: async () => {
+      if (!isNativePlatform()) {
+        toast("warning", "Only available in the Android app");
+        return;
+      }
+      try {
+        const { installed } = await KodeServer.isTermuxInstalled();
+        if (!installed) {
+          toast("error", "Termux is not installed");
+          return;
+        }
+        const workdir = await showInputBox({
+          prompt: "Server directory inside Termux",
+          value: "~/kode-server",
+        });
+        if (!workdir) return;
+        await KodeServer.startInTermux({
+          command: "EDITOR_WORKSPACE=/storage/emulated/0/Projects ./start.sh",
+          workdir,
+        });
+        bridge.setUrl("ws://127.0.0.1:3177/ws");
+        toast("info", "Starting the server in Termux; connecting to 127.0.0.1:3177");
+      } catch (error: any) {
+        toast("error", `Termux launch failed: ${error?.message}`);
+      }
+    },
+  },
   {
     id: "lsp.config",
     title: "LSP: Show Server Config",
