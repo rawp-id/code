@@ -450,3 +450,22 @@ body {
 .ext-item .cmd:hover {
   text-decoration: underline;
 }
+
+.cm-tooltip {
+  background: #252526;
+  border: 1px solid var(--border);
+  color: var(--fg);
+}
+
+.cm-hover {
+  padding: 6px 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-width: 460px;
+}
+
+.cm-tooltip-autocomplete ul li[aria-selected] {
+  background: var(--selected);
+  color: #ffffff;
+}

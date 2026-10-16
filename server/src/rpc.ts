@@ -50,6 +50,7 @@ export function handleConnection(ws: WebSocket): void {
       callClient("ui.showInputBox", { options }).catch(() => undefined),
     output: (channel, line) => event("output.line", { channel, line }),
     executeCommand: (command, ...args) => host.executeCommand(command, args),
+    setDiagnostics: (uri, diagnostics) => event("ext.diagnostics", { uri, diagnostics }),
     applyEdits: (uri, edits) =>
       callClient("editor.applyEdits", { uri, edits })
         .then((result) => result !== false)
@@ -135,6 +136,7 @@ export function handleConnection(ws: WebSocket): void {
 
     "ext.list": async () => {
       await host.scan();
+      await host.activateStartup();
       return host.list();
     },
     "ext.activate": ({ id }: { id: string }) => host.activate(id),
@@ -147,11 +149,15 @@ export function handleConnection(ws: WebSocket): void {
       })),
     "ext.execCommand": ({ command, args }: { command: string; args?: any[] }) =>
       host.executeCommand(command, args || []),
+    "ext.completion": ({ uri, position }: any) => host.provideCompletionItems(uri, position),
+    "ext.hover": ({ uri, position }: any) => host.provideHover(uri, position),
 
     "lsp.didOpen": ({ uri, languageId, text }: any) => lsp.didOpen(uri, languageId, text),
     "lsp.didChange": ({ uri, text }: any) => lsp.didChange(uri, text),
     "lsp.didClose": ({ uri }: any) => lsp.didClose(uri),
     "lsp.completion": ({ uri, position }: any) => lsp.completion(uri, position),
+    "lsp.hover": ({ uri, position }: any) =>
+      lsp.request(uri, "textDocument/hover", { textDocument: { uri }, position }).catch(() => null),
     "lsp.request": ({ uri, method, params }: any) => lsp.request(uri, method, params),
   };
 

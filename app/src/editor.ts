@@ -10,6 +10,7 @@ import {
   dropCursor,
   rectangularSelection,
   crosshairCursor,
+  hoverTooltip,
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import {
@@ -61,12 +62,19 @@ export class EditorManager {
   readonly view: EditorView;
   private docs = new Map<string, OpenDoc>();
   private listeners = new Set<() => void>();
+  private diagnostics: { lsp: Map<string, any[]>; ext: Map<string, any[]> } = {
+    lsp: new Map(),
+    ext: new Map(),
+  };
   active: string | null = null;
 
   constructor(parent: HTMLElement) {
     this.view = new EditorView({ parent, state: this.emptyState() });
     bridge.on("lsp.diagnostics", (params) =>
-      this.applyDiagnostics(params.uri, params.diagnostics)
+      this.applyDiagnostics(params.uri, params.diagnostics, "lsp")
+    );
+    bridge.on("ext.diagnostics", (params) =>
+      this.applyDiagnostics(params.uri, params.diagnostics, "ext")
     );
   }
 
@@ -115,6 +123,7 @@ export class EditorManager {
       highlightActiveLine(),
       highlightSelectionMatches(),
       lintGutter(),
+      this.hoverTooltip(),
       oneDark,
       ...spec.extensions,
       keymap.of([
@@ -275,28 +284,63 @@ export class EditorManager {
     if (!word) return null;
     if (word.from === word.to && !context.explicit) return null;
     const line = context.state.doc.lineAt(context.pos);
+    const position = { line: line.number - 1, character: context.pos - line.from };
+    const uri = "file://" + path;
     try {
-      const items = await bridge.request<any[]>("lsp.completion", {
-        uri: "file://" + path,
-        position: { line: line.number - 1, character: context.pos - line.from },
-      });
-      if (!items || items.length === 0) return null;
-      const options: Completion[] = items.map((item: any) => ({
-        label: item.label,
-        type: LSP_KIND[item.kind] || "text",
-        detail: item.detail,
-      }));
+      const [lspItems, extItems] = await Promise.all([
+        bridge.request<any[]>("lsp.completion", { uri, position }).catch(() => []),
+        bridge.request<any[]>("ext.completion", { uri, position }).catch(() => []),
+      ]);
+      const seen = new Set<string>();
+      const options: Completion[] = [];
+      for (const item of [...(lspItems || []), ...(extItems || [])]) {
+        if (!item?.label || seen.has(item.label)) continue;
+        seen.add(item.label);
+        options.push({ label: item.label, type: LSP_KIND[item.kind] || "text", detail: item.detail });
+      }
+      if (options.length === 0) return null;
       return { from: word.from, options, validFor: /^[\w$#-]*$/ };
     } catch {
       return null;
     }
   }
 
-  private applyDiagnostics(uri: string, diagnostics: any[]): void {
+  private hoverTooltip(): Extension {
+    return hoverTooltip(async (view, pos) => {
+      const path = this.active;
+      if (!path) return null;
+      const line = view.state.doc.lineAt(pos);
+      const position = { line: line.number - 1, character: pos - line.from };
+      const uri = "file://" + path;
+      const [ext, lsp] = await Promise.all([
+        bridge.request<any>("ext.hover", { uri, position }).catch(() => null),
+        bridge.request<any>("lsp.hover", { uri, position }).catch(() => null),
+      ]);
+      const parts = [hoverContents(lsp?.contents), ext?.contents].filter(Boolean) as string[];
+      const text = parts.join("\n\n");
+      if (!text) return null;
+      return {
+        pos,
+        create: () => {
+          const dom = document.createElement("div");
+          dom.className = "cm-hover";
+          dom.textContent = text;
+          return { dom };
+        },
+      };
+    });
+  }
+
+  private applyDiagnostics(uri: string, diagnostics: any[], source: "lsp" | "ext"): void {
     const path = uri.replace(/^file:\/\//, "");
+    this.diagnostics[source].set(path, diagnostics || []);
     if (this.active !== path || !this.docs.has(path)) return;
     const state = this.view.state;
-    const converted: Diagnostic[] = (diagnostics || []).map((item: any) => {
+    const combined = [
+      ...(this.diagnostics.lsp.get(path) || []),
+      ...(this.diagnostics.ext.get(path) || []),
+    ];
+    const converted: Diagnostic[] = combined.map((item: any) => {
       const from = offsetOf(state, item.range.start);
       const to = Math.max(from, offsetOf(state, item.range.end));
       const severity: Diagnostic["severity"] =
@@ -305,6 +349,18 @@ export class EditorManager {
     });
     this.view.dispatch(setDiagnostics(state, converted));
   }
+}
+
+function hoverContents(contents: any): string {
+  if (typeof contents === "string") return contents;
+  if (Array.isArray(contents)) {
+    return contents
+      .map((part) => (typeof part === "string" ? part : part?.value ?? ""))
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  if (contents?.value) return String(contents.value);
+  return "";
 }
 
 function offsetOf(state: EditorState, position: { line: number; character: number }): number {

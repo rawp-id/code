@@ -32,6 +32,11 @@ export interface ExtensionInfo {
   commands: ExtensionCommand[];
 }
 
+interface ProviderEntry {
+  selector: any;
+  provider: any;
+}
+
 export interface UiBridge {
   showMessage(
     kind: "info" | "warning" | "error",
@@ -45,6 +50,7 @@ export interface UiBridge {
   applyEdits(uri: string, edits: TextEdit[]): Promise<boolean>;
   saveDocument(uri: string): Promise<boolean>;
   showDocument(uri: string): Promise<boolean>;
+  setDiagnostics(uri: string, diagnostics: any[]): void;
 }
 
 class Emitter {
@@ -134,10 +140,14 @@ export class ExtensionHost {
   private activatedExports = new Map<string, any>();
   private contexts = new Map<string, { subscriptions: { dispose(): void }[] }>();
   private scanned = false;
+  private startupActivated = false;
 
   private documents = new Map<string, DocEntry>();
   private activeUri: string | null = null;
   private selection: Selection = emptySelection();
+  private completionProviders: ProviderEntry[] = [];
+  private hoverProviders: ProviderEntry[] = [];
+  private extensionDiagnostics = new Map<string, any[]>();
 
   private emitters = {
     open: new Emitter(),
@@ -272,6 +282,22 @@ export class ExtensionHost {
     return entry.handler(...args);
   }
 
+  /** Activate extensions that ask to run on startup (`"*"` / `onStartupFinished`). */
+  async activateStartup(): Promise<void> {
+    if (this.startupActivated) return;
+    this.startupActivated = true;
+    if (!this.scanned) await this.scan();
+    for (const ext of this.extensions.values()) {
+      const events: string[] = ext.manifest?.activationEvents || [];
+      if (!events.includes("*") && !events.includes("onStartupFinished")) continue;
+      try {
+        await this.activate(ext.id);
+      } catch (error: any) {
+        this.ui.output("Extension Host", `startup activation failed for ${ext.id}: ${error?.message}`);
+      }
+    }
+  }
+
   // ---- document model -----------------------------------------------------
 
   openDocument(uri: string, languageId: string, text: string): void {
@@ -378,6 +404,90 @@ export class ExtensionHost {
     } catch {
       return {};
     }
+  }
+
+  // ---- language providers -------------------------------------------------
+
+  async provideCompletionItems(
+    uri: string,
+    position: { line: number; character: number }
+  ): Promise<any[]> {
+    const entry = this.documents.get(uri);
+    if (!entry) return [];
+    const document = this.makeDocument(entry);
+    const results: any[] = [];
+    for (const { selector, provider } of this.completionProviders) {
+      if (!matchesSelector(selector, document.languageId) || !provider?.provideCompletionItems) continue;
+      try {
+        const list = await provider.provideCompletionItems(
+          document,
+          position,
+          cancellationToken(),
+          { triggerKind: 1, triggerCharacter: undefined }
+        );
+        const items = Array.isArray(list) ? list : list?.items || [];
+        for (const item of items) results.push(normalizeCompletionItem(item));
+      } catch (error: any) {
+        this.ui.output("Extension Host", `completion provider failed: ${error?.message}`);
+      }
+    }
+    return results;
+  }
+
+  async provideHover(
+    uri: string,
+    position: { line: number; character: number }
+  ): Promise<{ contents: string; range?: Range } | null> {
+    const entry = this.documents.get(uri);
+    if (!entry) return null;
+    const document = this.makeDocument(entry);
+    for (const { selector, provider } of this.hoverProviders) {
+      if (!matchesSelector(selector, document.languageId) || !provider?.provideHover) continue;
+      try {
+        const hover = await provider.provideHover(document, position, cancellationToken());
+        if (hover) {
+          return {
+            contents: hoverText(hover),
+            range: hover.range ? toRange(hover.range) : undefined,
+          };
+        }
+      } catch (error: any) {
+        this.ui.output("Extension Host", `hover provider failed: ${error?.message}`);
+      }
+    }
+    return null;
+  }
+
+  setExtensionDiagnostics(uri: string, diagnostics: any[]): void {
+    this.extensionDiagnostics.set(uri, diagnostics);
+    this.ui.setDiagnostics(
+      uri,
+      diagnostics.map((diagnostic) => ({
+        range: toRange(diagnostic.range),
+        message: String(diagnostic.message ?? ""),
+        severity: (diagnostic.severity ?? 0) + 1,
+        source: diagnostic.source,
+        code: diagnostic.code,
+      }))
+    );
+  }
+
+  private registerProvider(
+    bucket: ProviderEntry[],
+    context: any,
+    selector: any,
+    provider: any
+  ): { dispose(): void } {
+    const entry: ProviderEntry = { selector, provider };
+    bucket.push(entry);
+    const disposable = {
+      dispose: () => {
+        const index = bucket.indexOf(entry);
+        if (index >= 0) bucket.splice(index, 1);
+      },
+    };
+    context.subscriptions.push(disposable);
+    return disposable;
   }
 
   // ---- vscode shim --------------------------------------------------------
@@ -556,11 +666,47 @@ export class ExtensionHost {
         },
       },
       languages: {
-        registerCompletionItemProvider: () => ({ dispose() {} }),
-        registerHoverProvider: () => ({ dispose() {} }),
+        registerCompletionItemProvider(
+          selector: any,
+          provider: any,
+          ..._triggerCharacters: string[]
+        ) {
+          return host.registerProvider(host.completionProviders, context, selector, provider);
+        },
+        registerHoverProvider(selector: any, provider: any) {
+          return host.registerProvider(host.hoverProviders, context, selector, provider);
+        },
         registerCodeActionsProvider: () => ({ dispose() {} }),
         registerDocumentFormattingEditProvider: () => ({ dispose() {} }),
-        createDiagnosticCollection: () => ({ set() {}, delete() {}, clear() {}, dispose() {} }),
+        createDiagnosticCollection(name?: string) {
+          const tracked = new Set<string>();
+          return {
+            name: name || "diagnostics",
+            set(uriOrEntries: any, diagnostics?: any[]) {
+              if (Array.isArray(uriOrEntries)) {
+                for (const [uri, items] of uriOrEntries) {
+                  tracked.add(uriKey(uri));
+                  host.setExtensionDiagnostics(uriKey(uri), items || []);
+                }
+                return;
+              }
+              const uri = uriKey(uriOrEntries);
+              tracked.add(uri);
+              host.setExtensionDiagnostics(uri, diagnostics || []);
+            },
+            delete(uri: any) {
+              tracked.delete(uriKey(uri));
+              host.setExtensionDiagnostics(uriKey(uri), []);
+            },
+            clear() {
+              for (const uri of tracked) host.setExtensionDiagnostics(uri, []);
+              tracked.clear();
+            },
+            dispose() {
+              this.clear();
+            },
+          };
+        },
         match: () => 0,
       },
       env: {
@@ -719,6 +865,48 @@ function getPath(object: any, dotted: string, fallback: any): any {
 function emptySelection(): Selection {
   const point = { line: 0, character: 0 };
   return { start: point, end: { ...point }, anchor: { ...point }, active: { ...point }, isEmpty: true };
+}
+
+function matchesSelector(selector: any, languageId: string): boolean {
+  if (typeof selector === "string") return selector === "*" || selector === languageId;
+  if (Array.isArray(selector)) return selector.some((entry) => matchesSelector(entry, languageId));
+  if (selector && typeof selector === "object") {
+    return !selector.language || selector.language === "*" || selector.language === languageId;
+  }
+  return false;
+}
+
+function cancellationToken() {
+  return {
+    isCancellationRequested: false,
+    onCancellationRequested: () => ({ dispose() {} }),
+  };
+}
+
+/** VS Code completion kinds are LSP kinds minus one. */
+function normalizeCompletionItem(item: any): any {
+  return {
+    label: typeof item.label === "string" ? item.label : item.label?.label ?? "",
+    kind: (item.kind ?? 0) + 1,
+    detail: item.detail,
+    documentation:
+      typeof item.documentation === "string" ? item.documentation : item.documentation?.value,
+    insertText: item.insertText,
+    range: item.range ? toRange(item.range) : undefined,
+  };
+}
+
+function hoverText(hover: any): string {
+  const contents = hover?.contents;
+  if (typeof contents === "string") return contents;
+  if (Array.isArray(contents)) {
+    return contents
+      .map((part) => (typeof part === "string" ? part : part?.value ?? ""))
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  if (contents?.value) return String(contents.value);
+  return "";
 }
 
 function languageForPath(filePath: string): string {

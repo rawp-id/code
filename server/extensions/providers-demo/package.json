@@ -1,0 +1,11 @@
+{
+  "name": "providers-demo",
+  "displayName": "Providers Demo",
+  "publisher": "kode",
+  "version": "0.1.0",
+  "description": "Demo extension registering completion, hover and diagnostics providers.",
+  "main": "./extension.js",
+  "engines": { "vscode": "^1.80.0" },
+  "activationEvents": ["*"],
+  "contributes": {}
+}
