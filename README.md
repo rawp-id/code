@@ -114,6 +114,33 @@ first time a document of that language is opened. If the command cannot be
 spawned the failure is reported and the editor keeps working. Use
 **LSP: Show Server Config** from the palette to inspect the merged config.
 
+## Android (Capacitor)
+
+The web UI is wrapped with Capacitor; the native project lives in `app/android`.
+
+The editor talks to the Node server over WebSocket at `VITE_SERVER_URL`
+(default `ws://<hostname>:3177/ws`). On a phone that means the server has to run
+**on the device** (or on your LAN during development).
+
+```bash
+# build the web app and copy it into the Android project
+npm run android:sync
+# open the project in Android Studio
+npm run android:open
+```
+
+For LAN development, start `npm run dev:lan` and build the app with the server
+address baked in:
+
+```bash
+VITE_SERVER_URL=ws://192.168.1.20:3177/ws npm run android:sync
+```
+
+Running the server standalone on Android needs a Node runtime plus a pseudo
+terminal (e.g. bundled `node`/`proot` as `lib*.so` in `jniLibs`, with a native
+`forkpty`). Those native plugins (`PtyPlugin`, `ExecPlugin`, `FsPlugin`) sit
+behind the same bridge protocol and are the next step.
+
 ## Next steps
 
 1. Connect `languages.*` providers (completion, hover, diagnostics) to the
