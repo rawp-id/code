@@ -1,0 +1,17 @@
+{
+  "name": "hello",
+  "displayName": "Hello World",
+  "publisher": "kode",
+  "version": "0.1.0",
+  "description": "Demo extension: commands, input box, quick pick and an output channel.",
+  "main": "./extension.js",
+  "engines": { "vscode": "^1.80.0" },
+  "contributes": {
+    "commands": [
+      { "command": "hello.sayHello", "title": "Hello: Say Hello" },
+      { "command": "hello.askName", "title": "Hello: Ask My Name" },
+      { "command": "hello.pickColor", "title": "Hello: Pick A Color" },
+      { "command": "hello.log", "title": "Hello: Write To Output Channel" }
+    ]
+  }
+}

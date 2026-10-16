@@ -1,0 +1,21 @@
+{
+  "name": "kode",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Lightweight VS Code-like editor with a Node extension host and LSP.",
+  "workspaces": [
+    "app",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,app -c cyan,green \"npm:dev:server\" \"npm:dev:app\"",
+    "dev:server": "npm --workspace server run dev",
+    "dev:app": "npm --workspace app run dev",
+    "dev:lan": "VITE_DEV_HOST=0.0.0.0 npm run dev",
+    "build": "npm --workspace app run build",
+    "typecheck": "npm --workspace server run typecheck && npm --workspace app run typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

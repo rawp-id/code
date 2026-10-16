@@ -1,0 +1,32 @@
+{
+  "$schema": "https://acode.app/schema/plugin/v0.1.0.json",
+  "id": "com.acode.marketplace.vscode",
+  "name": "VS Code Marketplace",
+  "main": "main.js",
+  "version": "1.2.2",
+  "readme": "readme.md",
+  "changelogs": "changelog.md",
+  "repository": "https://github.com/rawp-id/acode-vscode-marketplace.git",
+  "icon": "icon.png",
+  "files": [],
+  "minVersionCode": 1000,
+  "license": "MIT",
+  "keywords": [
+    "marketplace",
+    "vscode",
+    "openvsx",
+    "extensions",
+    "themes",
+    "icons",
+    "lsp",
+    "autocomplete"
+  ],
+  "price": 0,
+  "permissions": [
+    "network"
+  ],
+  "author": {
+    "name": "rawp-id",
+    "url": "https://github.com/rawp-id"
+  }
+}

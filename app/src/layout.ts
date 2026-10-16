@@ -1,0 +1,83 @@
+export interface Layout {
+  root: HTMLElement;
+  titleName: HTMLElement;
+  connDot: HTMLElement;
+  connText: HTMLElement;
+  activityBar: HTMLElement;
+  sidebar: HTMLElement;
+  sideTitle: HTMLElement;
+  sideBody: HTMLElement;
+  tabs: HTMLElement;
+  editorHost: HTMLElement;
+  panel: HTMLElement;
+  panelTabs: HTMLElement;
+  terminalHost: HTMLElement;
+  outputHost: HTMLElement;
+  statusBar: HTMLElement;
+}
+
+export function createLayout(root: HTMLElement): Layout {
+  root.innerHTML = `
+    <div class="layout">
+      <div class="titlebar">
+        <span class="title" data-title>Kode</span>
+        <span class="spacer"></span>
+        <span class="conn"><span class="dot" data-dot></span><span data-conn>connecting</span></span>
+      </div>
+      <div class="activitybar" data-activity>
+        <button data-view="files" class="active" title="Explorer">🗂</button>
+        <button data-view="extensions" title="Extensions">🧩</button>
+      </div>
+      <div class="main">
+        <div class="sidebar" data-sidebar>
+          <div class="sidebar-title" data-side-title>Explorer</div>
+          <div class="sidebar-body" data-side-body></div>
+        </div>
+        <div class="center">
+          <div class="tabs" data-tabs></div>
+          <div class="editor-host" data-editor></div>
+          <div class="panel hidden" data-panel>
+            <div class="panel-head" data-panel-tabs>
+              <span class="panel-tab active" data-panel-tab="terminal">Terminal</span>
+              <span class="panel-tab" data-panel-tab="output">Output</span>
+              <span class="spacer"></span>
+              <button class="close" data-panel-close title="Close panel">✕</button>
+            </div>
+            <div class="panel-body" data-panel-body="terminal">
+              <div class="terminal-host" data-terminal></div>
+            </div>
+            <div class="panel-body hidden" data-panel-body="output">
+              <div class="output-host" data-output></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="statusbar" data-status></div>
+      <div class="toasts" data-toasts></div>
+    </div>
+  `;
+
+  const pick = <T extends HTMLElement = HTMLElement>(selector: string): T => {
+    const element = root.querySelector<T>(selector);
+    if (!element) throw new Error(`Missing element: ${selector}`);
+    return element;
+  };
+
+  return {
+    root,
+    titleName: pick("[data-title]"),
+    connDot: pick("[data-dot]"),
+    connText: pick("[data-conn]"),
+    activityBar: pick("[data-activity]"),
+    sidebar: pick("[data-sidebar]"),
+    sideTitle: pick("[data-side-title]"),
+    sideBody: pick("[data-side-body]"),
+    tabs: pick("[data-tabs]"),
+    editorHost: pick("[data-editor]"),
+    panel: pick("[data-panel]"),
+    panelTabs: pick("[data-panel-tabs]"),
+    terminalHost: pick("[data-terminal]"),
+    outputHost: pick("[data-output]"),
+    statusBar: pick("[data-status]"),
+  };
+}
