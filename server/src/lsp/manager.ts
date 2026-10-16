@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,7 +9,13 @@ type Pending = {
 };
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DEMO_SERVER = path.resolve(HERE, "..", "..", "lsp-servers", "demo-lsp.mjs");
+const SERVER_ROOT = path.resolve(HERE, "..", "..");
+const DEMO_SERVER = path.resolve(SERVER_ROOT, "lsp-servers", "demo-lsp.mjs");
+
+interface ServerSpec {
+  command: string;
+  args?: string[];
+}
 
 /** A single language server process speaking LSP over stdio. */
 class LspConnection {
@@ -28,12 +35,20 @@ class LspConnection {
       process.stderr.write(`[lsp] ${chunk.toString()}`)
     );
     this.proc.on("exit", (code) => {
+      if (this.disposed) return;
       this.disposed = true;
       for (const pending of this.pending.values()) {
         pending.reject(new Error("Language server exited"));
       }
       this.pending.clear();
       this.onExit(code);
+    });
+    this.proc.on("error", (error) => {
+      if (this.disposed) return;
+      this.disposed = true;
+      for (const pending of this.pending.values()) pending.reject(error);
+      this.pending.clear();
+      this.onExit(null);
     });
   }
 
@@ -123,10 +138,30 @@ export class LspManager {
   private versions = new Map<string, number>();
   private starting = new Map<string, Promise<LspConnection>>();
 
-  constructor(private emit: (method: string, data: any) => void) {}
+  constructor(
+    private emit: (method: string, data: any) => void,
+    private getWorkspaceRoot: () => string = () => process.cwd()
+  ) {}
 
-  private serverFor(_languageId: string): { command: string; args: string[] } {
-    return { command: process.execPath, args: [DEMO_SERVER] };
+  /** Merge `lsp.config.json` from the workspace then the server package. */
+  loadConfig(): Record<string, ServerSpec> {
+    const merged: Record<string, ServerSpec> = {};
+    for (const root of [this.getWorkspaceRoot(), SERVER_ROOT]) {
+      try {
+        Object.assign(merged, JSON.parse(readFileSync(path.join(root, "lsp.config.json"), "utf8")));
+      } catch {
+        /* no config here */
+      }
+    }
+    return merged;
+  }
+
+  private serverFor(languageId: string): { command: string; args: string[] } {
+    const spec = this.loadConfig()[languageId] || this.loadConfig()["*"];
+    if (!spec || spec.command === "demo") {
+      return { command: process.execPath, args: [DEMO_SERVER] };
+    }
+    return { command: spec.command, args: spec.args ?? [] };
   }
 
   private async connectionFor(languageId: string): Promise<LspConnection> {

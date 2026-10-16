@@ -21,9 +21,10 @@ server/   Node process: workspace FS, terminal (pty), extension host, LSP
   edits, events, and on-demand activation.
 - **Settings** read from `settings.json` at the workspace root via
   `workspace.getConfiguration()`.
-- **Language server** over LSP: diagnostics, completion, and generic requests.
-  Ships with `server/lsp-servers/demo-lsp.mjs` so the pipeline works out of the
-  box; swap it for a real server in `server/src/lsp/manager.ts`.
+- **Language server** over LSP: diagnostics, completion, hover, and generic
+  requests. Servers are configured per language in `lsp.config.json`;
+  `server/lsp-servers/demo-lsp.mjs` is the default so the pipeline works out of
+  the box.
 
 ## Run it
 
@@ -83,6 +84,25 @@ shim; `require('fs')`, `require('path')`, and other Node builtins work normally.
 build), it falls back to a plain `child_process` shell: output works, but there
 is no echo and no job control. On Android the plan is a native JNI `forkpty`
 behind the same interface.
+
+## Language servers
+
+`lsp.config.json` maps a language id to a server command. It is merged from the
+workspace root and the server package root, so a workspace can override the
+defaults. `"*"` is the fallback and `"demo"` selects the bundled demo server.
+
+```json
+{
+  "*": { "command": "demo" },
+  "python": { "command": "pyright-langserver", "args": ["--stdio"] },
+  "typescript": { "command": "typescript-language-server", "args": ["--stdio"] }
+}
+```
+
+See `server/lsp.config.example.json` for more. A server is started lazily the
+first time a document of that language is opened. If the command cannot be
+spawned the failure is reported and the editor keeps working. Use
+**LSP: Show Server Config** from the palette to inspect the merged config.
 
 ## Next steps
 

@@ -159,6 +159,16 @@ const builtinCommands: Command[] = [
   { id: "ext.refresh", title: "Extensions: Refresh", run: () => refreshExtensions() },
   { id: "ext.all", title: "Extensions: Show All", run: () => { layout.sidebar.classList.remove("hidden"); setSidebarView("extensions"); } },
   { id: "workspace.open", title: "Workspace: Open Folder…", run: () => openFolder() },
+  {
+    id: "lsp.config",
+    title: "LSP: Show Server Config",
+    run: async () => {
+      const config = await bridge.request("lsp.config");
+      layout.outputHost.textContent += `[LSP] ${JSON.stringify(config, null, 2)}\n`;
+      togglePanel(true);
+      setPanelView("output");
+    },
+  },
   { id: "terminal.clear", title: "Terminal: Clear", run: () => terminal.clear() },
 ];
 

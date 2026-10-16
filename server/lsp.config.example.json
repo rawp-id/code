@@ -1,0 +1,7 @@
+{
+  "typescript": { "command": "typescript-language-server", "args": ["--stdio"] },
+  "javascript": { "command": "typescript-language-server", "args": ["--stdio"] },
+  "python": { "command": "pyright-langserver", "args": ["--stdio"] },
+  "rust": { "command": "rust-analyzer" },
+  "go": { "command": "gopls" }
+}

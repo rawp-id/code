@@ -39,7 +39,7 @@ export function handleConnection(ws: WebSocket): void {
     });
   };
 
-  const lsp = new LspManager((method, data) => event(method, data));
+  const lsp = new LspManager((method, data) => event(method, data), () => workspace.root);
 
   const ui: UiBridge = {
     showMessage: (kind, message, items) =>
@@ -159,6 +159,7 @@ export function handleConnection(ws: WebSocket): void {
     "lsp.hover": ({ uri, position }: any) =>
       lsp.request(uri, "textDocument/hover", { textDocument: { uri }, position }).catch(() => null),
     "lsp.request": ({ uri, method, params }: any) => lsp.request(uri, method, params),
+    "lsp.config": () => lsp.loadConfig(),
   };
 
   ws.on("message", (raw) => {
