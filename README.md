@@ -129,17 +129,44 @@ npm run android:sync
 npm run android:open
 ```
 
-For LAN development, start `npm run dev:lan` and build the app with the server
-address baked in:
+The server address is **not** fixed at build time: use **Connection: Set Server
+URL…** from the command palette (or the connect dialog that appears when the
+server is unreachable). It is persisted on the device.
+
+For LAN development, start `npm run dev:lan` and point the app at
+`ws://<your-ip>:3177/ws`.
+
+### Run the server on the device (Termux / proot)
+
+The quickest way to get the full server running on Android today:
 
 ```bash
-VITE_SERVER_URL=ws://192.168.1.20:3177/ws npm run android:sync
+# on the computer
+npm run bundle:server        # -> build/kode-server.zip (~0.1 MB)
 ```
 
-Running the server standalone on Android needs a Node runtime plus a pseudo
-terminal (e.g. bundled `node`/`proot` as `lib*.so` in `jniLibs`, with a native
-`forkpty`). Those native plugins (`PtyPlugin`, `ExecPlugin`, `FsPlugin`) sit
-behind the same bridge protocol and are the next step.
+Copy `kode-server.zip` to the phone, then in Termux:
+
+```bash
+pkg install nodejs-lts unzip
+unzip kode-server.zip -d kode-server
+cd kode-server
+chmod +x start.sh
+EDITOR_WORKSPACE=/storage/emulated/0/Projects ./start.sh
+```
+
+Finally, in the app open **Connection: Set Server URL…** and enter
+`ws://127.0.0.1:3177/ws`. Extensions, LSP and the terminal now run on the phone.
+
+Notes:
+
+- The bundled server uses a plain shell fallback because `node-pty` is not
+  included. For a real pty, run `npm install node-pty` inside the bundle on the
+  device (needs a compiler) or use a `proot` distribution that ships it.
+- To build a fully self-contained APK, bundle `node`/`proot` as `lib*.so` in
+  `jniLibs` and add a `forkpty` JNI plugin, then start the server from a small
+  Capacitor plugin instead of Termux. The server and bridge protocol stay the
+  same.
 
 ## Next steps
 

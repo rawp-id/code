@@ -29,13 +29,33 @@ type Pending = {
 
 type RequestHandler = (params: any) => any;
 
+const STORAGE_KEY = "kode.serverUrl";
+
+function resolveDefaultUrl(): string {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return saved;
+  } catch {
+    /* storage unavailable */
+  }
+  const fromEnv = import.meta.env.VITE_SERVER_URL as string | undefined;
+  if (fromEnv) return fromEnv;
+  return `ws://${location.hostname || "localhost"}:3177/ws`;
+}
+
 /**
  * WebSocket bridge to the Node server. The protocol is symmetric:
  *   request:  { id, method, params }
  *   response: { id, result | error }
  *   event:    { event, data }
+ *
+ * The server address can be changed at runtime (`setUrl`) and is persisted, so
+ * the Android build can point at an on-device or LAN server without rebuilding.
  */
 export class Bridge {
+  serverUrl: string;
+  connected = false;
+
   private ws: WebSocket | null = null;
   private pending = new Map<number, Pending>();
   private events = new Map<string, Set<(data: any) => void>>();
@@ -43,34 +63,25 @@ export class Bridge {
   private queue: string[] = [];
   private seq = 1;
   private reconnectDelay = 500;
+  private reconnectTimer: number | undefined;
 
-  connected = false;
-
-  constructor(private url: string) {}
+  constructor(url?: string) {
+    this.serverUrl = url || resolveDefaultUrl();
+  }
 
   connect(): void {
-    const ws = new WebSocket(this.url);
-    this.ws = ws;
+    this.open();
+  }
 
-    ws.onopen = () => {
-      this.connected = true;
-      this.reconnectDelay = 500;
-      for (const message of this.queue.splice(0)) ws.send(message);
-      this.emit("status", { connected: true });
-    };
-
-    ws.onclose = () => {
-      this.connected = false;
-      this.emit("status", { connected: false });
-      setTimeout(() => this.connect(), this.reconnectDelay);
-      this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, 5000);
-    };
-
-    ws.onerror = () => {
-      /* close handler drives reconnection */
-    };
-
-    ws.onmessage = (event) => this.onMessage(event.data);
+  setUrl(url: string): void {
+    this.serverUrl = url;
+    try {
+      localStorage.setItem(STORAGE_KEY, url);
+    } catch {
+      /* storage unavailable */
+    }
+    this.reconnectDelay = 500;
+    this.open();
   }
 
   handleRequest(method: string, handler: RequestHandler): void {
@@ -98,6 +109,55 @@ export class Bridge {
     }
     set.add(listener);
     return () => set!.delete(listener);
+  }
+
+  private open(): void {
+    if (this.reconnectTimer !== undefined) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
+    }
+    this.closeSocket();
+    this.connected = false;
+    this.emit("status", { connected: false, url: this.serverUrl });
+
+    const ws = new WebSocket(this.serverUrl);
+    this.ws = ws;
+
+    ws.onopen = () => {
+      this.connected = true;
+      this.reconnectDelay = 500;
+      for (const message of this.queue.splice(0)) ws.send(message);
+      this.emit("status", { connected: true, url: this.serverUrl });
+    };
+
+    ws.onclose = () => {
+      if (this.ws !== ws) return;
+      this.connected = false;
+      this.emit("status", { connected: false, url: this.serverUrl });
+      this.reconnectTimer = window.setTimeout(() => this.open(), this.reconnectDelay);
+      this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, 5000);
+    };
+
+    ws.onerror = () => {
+      /* close handler drives reconnection */
+    };
+
+    ws.onmessage = (event) => this.onMessage(event.data);
+  }
+
+  private closeSocket(): void {
+    const ws = this.ws;
+    if (!ws) return;
+    ws.onopen = null;
+    ws.onclose = null;
+    ws.onerror = null;
+    ws.onmessage = null;
+    try {
+      ws.close();
+    } catch {
+      /* already closed */
+    }
+    this.ws = null;
   }
 
   private emit(event: string, data?: any): void {
@@ -141,8 +201,4 @@ export class Bridge {
   }
 }
 
-const defaultUrl =
-  (import.meta.env.VITE_SERVER_URL as string | undefined) ||
-  `ws://${location.hostname || "localhost"}:3177/ws`;
-
-export const bridge = new Bridge(defaultUrl);
+export const bridge = new Bridge();

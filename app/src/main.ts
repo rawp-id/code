@@ -6,6 +6,7 @@ import { EditorManager } from "./editor";
 import { TabsView } from "./tabs";
 import { FileTree, ExtensionsView } from "./sidebar";
 import { CommandPalette, showInputBox, showQuickPick, type Command } from "./palette";
+import { initConnectionUi, openConnectionDialog } from "./connect";
 import { TerminalPanel } from "./terminal";
 import { toast } from "./toast";
 import { languageLabel } from "./lang";
@@ -191,6 +192,7 @@ const builtinCommands: Command[] = [
   },
   { id: "ext.all", title: "Extensions: Show All", run: () => { layout.sidebar.classList.remove("hidden"); setSidebarView("extensions"); } },
   { id: "workspace.open", title: "Workspace: Open Folder…", run: () => openFolder() },
+  { id: "connection.url", title: "Connection: Set Server URL…", run: () => openConnectionDialog() },
   {
     id: "lsp.config",
     title: "LSP: Show Server Config",
@@ -287,9 +289,10 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-bridge.on("status", ({ connected }) => {
+bridge.on("status", ({ connected, url }) => {
   layout.connDot.classList.toggle("ok", connected);
-  layout.connText.textContent = connected ? "connected" : "connecting…";
+  layout.connText.textContent = connected ? `connected · ${String(url).replace(/^wss?:\/\//, "")}` : "offline";
+  layout.connText.title = url || "";
   renderStatus();
 });
 
@@ -329,5 +332,6 @@ async function init(): Promise<void> {
 }
 
 bridge.connect();
+initConnectionUi();
 setSidebarView("files");
 init();
