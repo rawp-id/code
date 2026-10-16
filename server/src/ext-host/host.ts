@@ -212,6 +212,12 @@ export class ExtensionHost {
     }));
   }
 
+  /** Force the next scan/startup pass to run again (after install/uninstall). */
+  markUnscanned(): void {
+    this.scanned = false;
+    this.startupActivated = false;
+  }
+
   async activate(id: string): Promise<ExtensionInfo | null> {
     if (!this.scanned) await this.scan();
     const ext = this.extensions.get(id);

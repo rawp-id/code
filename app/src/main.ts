@@ -157,6 +157,38 @@ const builtinCommands: Command[] = [
   { id: "view.explorer", title: "View: Show Explorer", run: () => { layout.sidebar.classList.remove("hidden"); setSidebarView("files"); } },
   { id: "view.extensions", title: "View: Show Extensions", run: () => { layout.sidebar.classList.remove("hidden"); setSidebarView("extensions"); } },
   { id: "ext.refresh", title: "Extensions: Refresh", run: () => refreshExtensions() },
+  {
+    id: "ext.install",
+    title: "Extensions: Install from VSIX…",
+    run: async () => {
+      const target = await showInputBox({ prompt: "Path or URL of the .vsix file" });
+      if (!target) return;
+      try {
+        const info = await bridge.request<{ displayName: string; version: string }>(
+          "ext.installVsix",
+          target.startsWith("http") ? { url: target } : { path: target }
+        );
+        toast("info", `Installed ${info.displayName} v${info.version}`);
+        await refreshExtensions();
+      } catch (error: any) {
+        toast("error", `Install failed: ${error?.message}`);
+      }
+    },
+  },
+  {
+    id: "ext.uninstall",
+    title: "Extensions: Uninstall…",
+    run: async () => {
+      const list = await bridge.request<ExtensionInfo[]>("ext.list").catch(() => []);
+      const choice = await showQuickPick(
+        list.map((ext) => ({ label: ext.displayName, description: ext.id, id: ext.id }))
+      );
+      if (!choice) return;
+      await bridge.request("ext.uninstall", { id: choice.id });
+      toast("info", `Uninstalled ${choice.label}`);
+      await refreshExtensions();
+    },
+  },
   { id: "ext.all", title: "Extensions: Show All", run: () => { layout.sidebar.classList.remove("hidden"); setSidebarView("extensions"); } },
   { id: "workspace.open", title: "Workspace: Open Folder…", run: () => openFolder() },
   {

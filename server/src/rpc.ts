@@ -4,6 +4,7 @@ import type { WebSocket } from "ws";
 import { Workspace } from "./workspace.js";
 import { PtyManager } from "./pty.js";
 import { ExtensionHost, type UiBridge } from "./ext-host/host.js";
+import { installVsix, uninstallExtension } from "./ext-host/installer.js";
 import { LspManager } from "./lsp/manager.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -151,6 +152,19 @@ export function handleConnection(ws: WebSocket): void {
       host.executeCommand(command, args || []),
     "ext.completion": ({ uri, position }: any) => host.provideCompletionItems(uri, position),
     "ext.hover": ({ uri, position }: any) => host.provideHover(uri, position),
+    "ext.installVsix": async ({ path: filePath, url }: { path?: string; url?: string }) => {
+      const info = await installVsix(EXTENSIONS_DIR, { path: filePath, url });
+      host.markUnscanned();
+      await host.scan();
+      return info;
+    },
+    "ext.uninstall": async ({ id }: { id: string }) => {
+      await host.deactivate(id).catch(() => undefined);
+      const removed = await uninstallExtension(EXTENSIONS_DIR, id);
+      host.markUnscanned();
+      await host.scan();
+      return removed;
+    },
 
     "lsp.didOpen": ({ uri, languageId, text }: any) => lsp.didOpen(uri, languageId, text),
     "lsp.didChange": ({ uri, text }: any) => lsp.didChange(uri, text),

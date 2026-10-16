@@ -78,6 +78,16 @@ The shim currently supports:
 Extensions run inside a `vm` wrapper with `require('vscode')` replaced by the
 shim; `require('fs')`, `require('path')`, and other Node builtins work normally.
 
+### Installing extensions
+
+Use **Extensions: Install from VSIX…** from the command palette and give a local
+`.vsix` path or a URL. **Extensions: Uninstall…** removes one. Only CommonJS
+extensions that stay inside the implemented API surface will run; extensions
+relying on unimplemented APIs load but may throw when those APIs are used.
+
+> Extensions execute with full Node privileges in the server process. Only
+> install extensions you trust.
+
 ## Terminal
 
 `PtyManager` uses `node-pty` when it is available. When it is not (no native
