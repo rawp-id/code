@@ -5,6 +5,7 @@ export interface Layout {
   activityBar: HTMLElement;
   sidebar: HTMLElement;
   sideTitle: HTMLElement;
+  sideActions: HTMLElement;
   sideBody: HTMLElement;
   tabs: HTMLElement;
   editorHost: HTMLElement;
@@ -24,7 +25,10 @@ export function createLayout(root: HTMLElement): Layout {
       </div>
       <div class="main">
         <div class="sidebar" data-sidebar>
-          <div class="sidebar-title" data-side-title>Explorer</div>
+          <div class="sidebar-head">
+            <div class="sidebar-title" data-side-title>Explorer</div>
+            <div class="sidebar-actions" data-side-actions></div>
+          </div>
           <div class="sidebar-body" data-side-body></div>
         </div>
         <div class="center">
@@ -61,6 +65,7 @@ export function createLayout(root: HTMLElement): Layout {
     activityBar: pick("[data-activity]"),
     sidebar: pick("[data-sidebar]"),
     sideTitle: pick("[data-side-title]"),
+    sideActions: pick("[data-side-actions]"),
     sideBody: pick("[data-side-body]"),
     tabs: pick("[data-tabs]"),
     editorHost: pick("[data-editor]"),

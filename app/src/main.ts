@@ -7,6 +7,7 @@ import { TabsView } from "./tabs";
 import { FileTree } from "./sidebar";
 import { ExtensionsView } from "./extensionsview";
 import { SearchView } from "./searchview";
+import { icons } from "./icons";
 import { CommandPalette, showInputBox, showQuickPick, type Command } from "./palette";
 import { initConnectionUi, openConnectionDialog } from "./connect";
 import { isNativePlatform, KodeServer } from "./native";
@@ -62,8 +63,28 @@ function setSidebarView(view: "files" | "search" | "extensions"): void {
   filesEl.style.display = view === "files" ? "" : "none";
   searchEl.style.display = view === "search" ? "" : "none";
   extensionsEl.style.display = view === "extensions" ? "" : "none";
+  renderSidebarActions(view);
   if (view === "search") search.focus();
   updateActivityBar();
+}
+
+function renderSidebarActions(view: "files" | "search" | "extensions"): void {
+  layout.sideActions.innerHTML = "";
+  if (view !== "files") return;
+  const make = (icon: string, title: string, run: () => void) => {
+    const button = document.createElement("button");
+    button.className = "sidebar-action";
+    button.title = title;
+    button.innerHTML = icon;
+    button.onclick = run;
+    return button;
+  };
+  layout.sideActions.append(
+    make(icons.newFile, "New File", () => filetree.createFile()),
+    make(icons.newFolder, "New Folder", () => filetree.createFolder()),
+    make(icons.refresh, "Refresh", () => filetree.refresh()),
+    make(icons.openFolder, "Open Folder", () => filetree.openFolder())
+  );
 }
 
 function toggleSidebar(force?: boolean): void {

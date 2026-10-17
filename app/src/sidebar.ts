@@ -13,22 +13,10 @@ export class FileTree {
   private menu: HTMLElement | null = null;
 
   constructor(private el: HTMLElement, private onOpen: (path: string) => void) {
-    this.el.innerHTML = `
-      <div class="tree-toolbar">
-        <button data-tree-action="new-file" title="New File">${icons.newFile}</button>
-        <button data-tree-action="new-folder" title="New Folder">${icons.newFolder}</button>
-        <button data-tree-action="refresh" title="Refresh">${icons.refresh}</button>
-        <button data-tree-action="open-folder" title="Open Folder">${icons.openFolder}</button>
-      </div>
-      <div class="tree-root" data-tree-root></div>
-    `;
-    this.root = this.el.querySelector<HTMLElement>("[data-tree-root]")!;
-    this.el.querySelector(".tree-toolbar")!.addEventListener("click", (event) => {
-      const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
-        "[data-tree-action]"
-      );
-      if (button?.dataset.treeAction) this.action(button.dataset.treeAction);
-    });
+    this.el.innerHTML = "";
+    this.root = document.createElement("div");
+    this.root.className = "tree-root";
+    this.el.append(this.root);
     bus.on("editor.active", ({ path }: { path: string }) => this.setActive(path));
   }
 
@@ -39,11 +27,12 @@ export class FileTree {
     if (this.activePath) this.setActive(this.activePath);
   }
 
-  private async action(name: string): Promise<void> {
-    if (name === "refresh") return this.refresh();
-    if (name === "open-folder") return this.openFolder();
-    if (name === "new-file") return this.create("file");
-    if (name === "new-folder") return this.create("dir");
+  createFile(base?: string): Promise<void> {
+    return this.create("file", base);
+  }
+
+  createFolder(base?: string): Promise<void> {
+    return this.create("dir", base);
   }
 
   private baseDir(): string {
@@ -53,12 +42,12 @@ export class FileTree {
     return slash >= 0 ? this.selected.path.slice(0, slash) : "";
   }
 
-  private async create(kind: "file" | "dir"): Promise<void> {
+  private async create(kind: "file" | "dir", baseArg?: string): Promise<void> {
     const name = await showInputBox({
       prompt: kind === "file" ? "New file name" : "New folder name",
     });
     if (!name) return;
-    const base = this.baseDir();
+    const base = baseArg ?? this.baseDir();
     const path = base ? `${base}/${name}` : name;
     try {
       await bridge.request(kind === "file" ? "fs.createFile" : "fs.mkdir", { path });
@@ -70,7 +59,7 @@ export class FileTree {
     }
   }
 
-  private async openFolder(): Promise<void> {
+  async openFolder(): Promise<void> {
     const root = await showInputBox({ prompt: "Absolute path of the folder to open" });
     if (!root) return;
     try {
@@ -131,6 +120,13 @@ export class FileTree {
       menu.append(item);
     };
 
+    if (entry.type === "dir") {
+      add("New File…", icons.newFile, () => this.create("file", entry.path));
+      add("New Folder…", icons.newFolder, () => this.create("dir", entry.path));
+      const separator = document.createElement("div");
+      separator.className = "tree-menu-sep";
+      menu.append(separator);
+    }
     add("Rename…", icons.rename, () => this.rename(entry));
     add("Delete", icons.trash, () => this.remove(entry));
 
@@ -212,7 +208,29 @@ export class FileTree {
     label.textContent = entry.name;
 
     row.append(chevron, icon, label);
+
+    if (entry.type === "dir") {
+      const actions = document.createElement("span");
+      actions.className = "tree-row-actions";
+      actions.append(
+        this.rowAction("New File", icons.newFile, () => this.create("file", entry.path)),
+        this.rowAction("New Folder", icons.newFolder, () => this.create("dir", entry.path))
+      );
+      row.append(actions);
+    }
     return row;
+  }
+
+  private rowAction(title: string, icon: string, run: () => void): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.className = "tree-row-action";
+    button.title = title;
+    button.innerHTML = icon;
+    button.onclick = (event) => {
+      event.stopPropagation();
+      run();
+    };
+    return button;
   }
 
   private updateIcon(entry: DirEntry, row: HTMLElement): void {
