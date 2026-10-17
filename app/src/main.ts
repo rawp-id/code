@@ -1,5 +1,5 @@
 import "./style.css";
-import { bridge, type ExtensionInfo, type ServerInfo } from "./bridge";
+import { bridge, type ExtensionInfo } from "./bridge";
 import { bus } from "./bus";
 import { createLayout } from "./layout";
 import { EditorManager } from "./editor";
@@ -10,7 +10,6 @@ import { initConnectionUi, openConnectionDialog } from "./connect";
 import { isNativePlatform, KodeServer } from "./native";
 import { TerminalPanel } from "./terminal";
 import { toast } from "./toast";
-import { languageLabel } from "./lang";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root");
@@ -35,7 +34,6 @@ const extensionsView = new ExtensionsView(extensionsEl, (extensionId, command) =
 const palette = new CommandPalette();
 const terminal = new TerminalPanel(layout.terminalHost);
 
-let serverInfo: ServerInfo | null = null;
 let activeView: "files" | "extensions" = "files";
 let panelView: "terminal" | "output" = "terminal";
 
@@ -69,40 +67,6 @@ function togglePanel(show?: boolean): void {
     terminal.ensureStarted();
     setTimeout(() => terminal.fitNow(), 0);
   }
-}
-
-function renderStatus(): void {
-  layout.statusBar.innerHTML = "";
-  const add = (text: string, title?: string) => {
-    const span = document.createElement("span");
-    span.className = "item";
-    span.textContent = text;
-    if (title) span.title = title;
-    layout.statusBar.append(span);
-  };
-  const spacer = document.createElement("span");
-  spacer.className = "spacer";
-
-  if (serverInfo) {
-    add(serverInfo.workspace.name, serverInfo.workspace.root);
-    const mode = serverInfo.ptyMode || (serverInfo.pty ? "pty" : "pipe");
-    add(mode, mode === "pipe" ? "fallback shell (no echo)" : `terminal pty: ${mode}`);
-  } else {
-    add("connecting…");
-  }
-
-  layout.statusBar.append(spacer);
-
-  if (editor.active) {
-    const doc = editor.get(editor.active);
-    const state = editor.view.state;
-    const head = state.selection.main.head;
-    const line = state.doc.lineAt(head);
-    add(`Ln ${line.number}, Col ${head - line.from + 1}`);
-    add(languageLabel(doc?.languageId || "plaintext"));
-    add(doc?.dirty ? "modified" : "saved");
-  }
-  add(bridge.connected ? "connected" : "offline");
 }
 
 async function refreshExtensions(): Promise<void> {
@@ -142,10 +106,7 @@ async function openFolder(): Promise<void> {
   if (!target) return;
   try {
     const info = await bridge.request<{ root: string; name: string }>("ws.setRoot", { root: target });
-    if (serverInfo) serverInfo.workspace = info;
-    layout.titleName.textContent = `Kode — ${info.name}`;
     await filetree.refresh();
-    renderStatus();
     toast("info", `Opened ${info.root}`);
   } catch (error: any) {
     toast("error", `Could not open folder: ${error?.message}`);
@@ -268,7 +229,6 @@ bus.on("file.save", () =>
 bus.on("palette.open", () => palette.open());
 bus.on("panel.toggle", () => togglePanel());
 bus.on("sidebar.toggle", () => layout.sidebar.classList.toggle("hidden"));
-editor.onDidChange(renderStatus);
 
 const toUri = (filePath: string) =>
   filePath.startsWith("file://") ? filePath : `file://${filePath}`;
@@ -350,13 +310,6 @@ document.addEventListener(
   true
 );
 
-bridge.on("status", ({ connected, url }) => {
-  layout.connDot.classList.toggle("ok", connected);
-  layout.connText.textContent = connected ? `connected · ${String(url).replace(/^wss?:\/\//, "")}` : "offline";
-  layout.connText.title = url || "";
-  renderStatus();
-});
-
 bridge.on("output.line", ({ channel, line }) => {
   layout.outputHost.textContent += `[${channel}] ${line}\n`;
   layout.outputHost.scrollTop = layout.outputHost.scrollHeight;
@@ -376,15 +329,12 @@ bridge.handleRequest("ui.showInputBox", (params) => showInputBox(params.options)
 
 async function init(): Promise<void> {
   try {
-    serverInfo = await bridge.request<ServerInfo>("server.info");
-    layout.titleName.textContent = `Kode — ${serverInfo.workspace.name}`;
-    layout.titleName.title = serverInfo.workspace.root;
+    await bridge.request("server.info");
   } catch (error: any) {
     toast("error", `Server unavailable: ${error?.message}`);
   }
   await filetree.refresh();
   await refreshExtensions();
-  renderStatus();
   try {
     await editor.open("README.md");
   } catch {

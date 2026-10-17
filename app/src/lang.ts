@@ -38,17 +38,3 @@ export function languageFor(filePath: string): LanguageSpec {
       return { languageId: "plaintext", extensions: [] };
   }
 }
-
-export function languageLabel(languageId: string): string {
-  const labels: Record<string, string> = {
-    javascript: "JavaScript",
-    typescript: "TypeScript",
-    json: "JSON",
-    html: "HTML",
-    css: "CSS",
-    markdown: "Markdown",
-    python: "Python",
-    plaintext: "Plain Text",
-  };
-  return labels[languageId] || languageId;
-}

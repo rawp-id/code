@@ -43,49 +43,8 @@ body {
   height: 100%;
   display: grid;
   grid-template-columns: 48px 1fr;
-  grid-template-rows: 35px 1fr 22px;
-  grid-template-areas:
-    "title title"
-    "activity main"
-    "status status";
-}
-
-.titlebar {
-  grid-area: title;
-  background: var(--bg-title);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 10px;
-  font-size: 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.titlebar .title {
-  font-weight: 600;
-}
-
-.titlebar .spacer {
-  flex: 1;
-}
-
-.titlebar .conn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--fg-dim);
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--error);
-  display: inline-block;
-}
-
-.dot.ok {
-  background: #3fb950;
+  grid-template-rows: 1fr;
+  grid-template-areas: "activity main";
 }
 
 .activitybar {
@@ -392,26 +351,6 @@ body {
   font-size: 12px;
   white-space: pre-wrap;
   color: var(--fg);
-}
-
-.statusbar {
-  grid-area: status;
-  background: var(--status);
-  color: var(--status-fg);
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 0 10px;
-  font-size: 12px;
-}
-
-.statusbar .spacer {
-  flex: 1;
-}
-
-.statusbar .item {
-  cursor: default;
-  white-space: nowrap;
 }
 
 /* overlays */

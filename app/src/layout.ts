@@ -2,9 +2,6 @@ import { icons } from "./icons";
 
 export interface Layout {
   root: HTMLElement;
-  titleName: HTMLElement;
-  connDot: HTMLElement;
-  connText: HTMLElement;
   activityBar: HTMLElement;
   sidebar: HTMLElement;
   sideTitle: HTMLElement;
@@ -15,17 +12,11 @@ export interface Layout {
   panelTabs: HTMLElement;
   terminalHost: HTMLElement;
   outputHost: HTMLElement;
-  statusBar: HTMLElement;
 }
 
 export function createLayout(root: HTMLElement): Layout {
   root.innerHTML = `
     <div class="layout">
-      <div class="titlebar">
-        <span class="title" data-title>Kode</span>
-        <span class="spacer"></span>
-        <span class="conn"><span class="dot" data-dot></span><span data-conn>connecting</span></span>
-      </div>
       <div class="activitybar" data-activity>
         <button data-view="files" class="active" title="Explorer">${icons.explorer}</button>
         <button data-view="extensions" title="Extensions">${icons.extensions}</button>
@@ -54,7 +45,6 @@ export function createLayout(root: HTMLElement): Layout {
           </div>
         </div>
       </div>
-      <div class="statusbar" data-status></div>
       <div class="toasts" data-toasts></div>
     </div>
   `;
@@ -67,9 +57,6 @@ export function createLayout(root: HTMLElement): Layout {
 
   return {
     root,
-    titleName: pick("[data-title]"),
-    connDot: pick("[data-dot]"),
-    connText: pick("[data-conn]"),
     activityBar: pick("[data-activity]"),
     sidebar: pick("[data-sidebar]"),
     sideTitle: pick("[data-side-title]"),
@@ -80,6 +67,5 @@ export function createLayout(root: HTMLElement): Layout {
     panelTabs: pick("[data-panel-tabs]"),
     terminalHost: pick("[data-terminal]"),
     outputHost: pick("[data-output]"),
-    statusBar: pick("[data-status]"),
   };
 }
