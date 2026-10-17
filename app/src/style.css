@@ -619,15 +619,18 @@ body {
 .toasts {
   position: fixed;
   right: 16px;
-  bottom: 30px;
+  bottom: 10px;
+  bottom: max(10px, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 8px;
   z-index: 60;
-  max-width: 360px;
+  max-width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
 }
 
 .toast {
+  pointer-events: auto;
   background: var(--input-bg);
   border-left: 3px solid var(--accent);
   padding: 10px 12px;
