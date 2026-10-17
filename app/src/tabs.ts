@@ -1,6 +1,5 @@
 import type { EditorManager } from "./editor";
 import { icons, fileColor } from "./icons";
-
 export class TabsView {
   constructor(private el: HTMLElement, private editor: EditorManager) {
     editor.onDidChange(() => this.render());
@@ -42,6 +41,15 @@ export class TabsView {
 
       tab.onclick = () => this.editor.activate(doc.path);
       this.el.append(tab);
+    }
+
+    const active = this.editor.openDocs.find((doc) => doc.path === this.editor.active);
+    if (active) {
+      const language = document.createElement("span");
+      language.className = "tabs-lang";
+      language.textContent = active.languageId;
+      language.title = `Detected language: ${active.languageId}`;
+      this.el.append(language);
     }
   }
 }

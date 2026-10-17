@@ -1,0 +1,9 @@
+name: sample
+version: 1.0.0
+services:
+  editor:
+    image: kode:latest
+    ports:
+      - "3177:3177"
+    environment:
+      NODE_ENV: production

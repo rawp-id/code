@@ -1,0 +1,6 @@
+{
+  "name": "sample",
+  "version": "1.0.0",
+  "keywords": ["editor", "android", "vscode"],
+  "nested": { "enabled": true, "count": 3 }
+}

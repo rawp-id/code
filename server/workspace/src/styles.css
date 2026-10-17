@@ -1,0 +1,14 @@
+:root {
+  --accent: #007acc;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  color: #333;
+}
+
+button:hover {
+  background: var(--accent);
+  color: white;
+}

@@ -362,6 +362,15 @@ body {
   white-space: nowrap;
 }
 
+.tabs-lang {
+  margin-left: auto;
+  padding: 0 10px;
+  align-self: center;
+  color: var(--fg-dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .tab .close:hover {
   background: var(--hover);
 }
