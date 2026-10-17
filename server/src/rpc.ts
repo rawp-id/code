@@ -214,10 +214,21 @@ export function handleConnection(ws: WebSocket): void {
       ),
     "ext.marketplace.install": async ({ downloadUrl }: { downloadUrl: string }) => {
       if (!downloadUrl) throw new Error("Missing download url");
-      const info = await installVsix(EXTENSIONS_DIR, { url: downloadUrl });
+      let last = 0;
+      const info = await installVsix(EXTENSIONS_DIR, { url: downloadUrl }, (received, total) => {
+        const now = Date.now();
+        if (now - last < 120) return;
+        last = now;
+        event("ext.installProgress", { downloadUrl, received, total });
+      });
+      event("ext.installProgress", { downloadUrl, received: 0, total: 0, done: true });
       host.markUnscanned();
       await host.scan();
       return info;
+    },
+    "ext.restart": async () => {
+      await host.restart();
+      return true;
     },
     "ext.marketplace.detail": ({ registry, id }: any) =>
       getMarketplaceDetail((registry as Registry) || "open-vsx", String(id || "")),

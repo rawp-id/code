@@ -356,13 +356,17 @@ export class EditorManager {
     startCompletion(this.view);
   }
 
-  showDocument(path: string): boolean {
-    if (this.docs.has(path)) {
+  showDocument(path: string): boolean {    if (this.docs.has(path)) {
       this.activate(path);
       return true;
     }
     this.open(path).catch(() => undefined);
     return true;
+  }
+
+  /** Re-render the tab strip (e.g. after an icon theme change). */
+  refreshTabs(): void {
+    this.fire();
   }
 
   /** Re-key an open document after the file was renamed on disk. */

@@ -1,4 +1,5 @@
 import { bridge } from "./bridge";
+import { bus } from "./bus";
 import { DEFAULT_SETTINGS, getPath, setPath, type Settings } from "./settings";
 import { SHIKI_THEMES, registerShikiTheme } from "./highlight";
 import { icons, setExtensionIconTheme } from "./icons";
@@ -274,10 +275,15 @@ export class SettingsView {
   private async loadIconTheme(value: string): Promise<void> {
     if (!value.startsWith("ext:")) {
       setExtensionIconTheme(null);
+      bus.emit("icons.changed");
       return;
     }
     const theme = this.extensionIconThemes.find((item) => item.id === value);
-    if (!theme) return;
+    if (!theme) {
+      setExtensionIconTheme(null);
+      bus.emit("icons.changed");
+      return;
+    }
     try {
       const data = await bridge.request("ext.iconThemeData", {
         extensionId: theme.extensionId,
@@ -285,8 +291,9 @@ export class SettingsView {
       });
       setExtensionIconTheme(data);
     } catch {
-      /* ignore */
+      setExtensionIconTheme(null);
     }
+    bus.emit("icons.changed");
   }
 
   private async ensureThemeData(): Promise<void> {

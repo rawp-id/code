@@ -67,6 +67,10 @@ export class ExtensionsView {
   private registry: Registry = "open-vsx";
 
   private detail: { data: DetailData; installed: boolean } | null = null;
+  private installProgress = new Map<
+    string,
+    (received: number, total: number, done: boolean) => void
+  >();
   private timer: number | undefined;
   private searchSeq = 0;
 
@@ -79,6 +83,8 @@ export class ExtensionsView {
       <div class="extensions-view">
         <div class="ext-search">
           <input type="text" spellcheck="false" placeholder="Search Extensions" data-ext-search />
+          <button class="ext-icon-btn" data-ext-action="refresh" title="Refresh">${icons.refresh}</button>
+          <button class="ext-icon-btn" data-ext-action="restart" title="Restart Extension Host">${icons.power}</button>
         </div>
         <div class="ext-tabs" data-ext-tabs>
           <button data-ext-tab="installed">Installed</button>
@@ -110,6 +116,28 @@ export class ExtensionsView {
       if (!button?.dataset.extTab) return;
       this.setTab(button.dataset.extTab as Tab);
     });
+
+    this.el
+      .querySelector("[data-ext-action='refresh']")!
+      .addEventListener("click", () => {
+        void this.refresh().then(() => this.onChanged?.());
+      });
+    this.el
+      .querySelector("[data-ext-action='restart']")!
+      .addEventListener("click", async () => {
+        try {
+          await bridge.request("ext.restart", {}, 120000);
+        } catch {
+          /* ignore */
+        }
+        this.popular = [];
+        await this.refresh();
+        this.onChanged?.();
+      });
+
+    bridge.on("ext.installProgress", ({ downloadUrl, received, total, done }) => {
+      this.installProgress.get(downloadUrl)?.(received, total, Boolean(done));
+    });
   }
 
   focus(): void {
@@ -123,7 +151,43 @@ export class ExtensionsView {
       this.installed = [];
     }
     if (this.popular.length === 0) await this.loadPopular();
+    if (this.detail) {
+      await this.openDetail(this.detail.data.id);
+      return;
+    }
     this.render();
+  }
+
+  private async performInstall(
+    downloadUrl: string | undefined,
+    button: HTMLButtonElement
+  ): Promise<void> {
+    if (!downloadUrl) {
+      button.textContent = "No download";
+      return;
+    }
+    const update = (received: number, total: number, done: boolean) => {
+      if (done) return;
+      button.textContent =
+        total > 0
+          ? `Downloading ${Math.round((received / total) * 100)}%`
+          : `Downloading ${(received / 1048576).toFixed(1)} MB`;
+    };
+    this.installProgress.set(downloadUrl, update);
+    button.disabled = true;
+    button.textContent = "Downloading…";
+    try {
+      await bridge.request("ext.marketplace.install", { downloadUrl }, 15 * 60 * 1000);
+      button.textContent = "Installed";
+      await this.refresh();
+      this.onChanged?.();
+    } catch (error: any) {
+      button.textContent = "Failed";
+      button.title = error?.message || "Install failed";
+    } finally {
+      this.installProgress.delete(downloadUrl);
+      button.disabled = false;
+    }
   }
 
   private setTab(tab: Tab): void {
@@ -460,21 +524,9 @@ export class ExtensionsView {
     const install = document.createElement("button");
     install.className = "ext-btn primary";
     install.textContent = "Install";
-    install.onclick = async (event) => {
+    install.onclick = (event) => {
       event.stopPropagation();
-      install.disabled = true;
-      install.textContent = "Installing…";
-      try {
-        await bridge.request("ext.marketplace.install", { downloadUrl: detail.downloadUrl });
-        this.detail = null;
-        await this.refresh();
-        this.onChanged?.();
-      } catch (error: any) {
-        install.textContent = "Failed";
-        install.title = error?.message || "Install failed";
-      } finally {
-        install.disabled = false;
-      }
+      void this.performInstall(detail.downloadUrl, install);
     };
     actions.append(install);
   }
@@ -555,20 +607,9 @@ export class ExtensionsView {
     const install = document.createElement("button");
     install.className = "ext-btn primary";
     install.textContent = "Install";
-    install.onclick = async (event) => {
+    install.onclick = (event) => {
       event.stopPropagation();
-      install.disabled = true;
-      install.textContent = "Installing…";
-      try {
-        await bridge.request("ext.marketplace.install", { downloadUrl: extension.downloadUrl });
-        await this.refresh();
-        this.onChanged?.();
-      } catch (error: any) {
-        install.textContent = "Failed";
-        install.title = error?.message || "Install failed";
-      } finally {
-        install.disabled = false;
-      }
+      void this.performInstall(extension.downloadUrl, install);
     };
     actions.append(install);
     return card;

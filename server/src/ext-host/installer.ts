@@ -17,9 +17,10 @@ const PREFIX = "extension/";
 /** Install a `.vsix` (from a local path or URL) into the extensions directory. */
 export async function installVsix(
   extensionsDir: string,
-  source: { path?: string; url?: string; data?: Buffer }
+  source: { path?: string; url?: string; data?: Buffer },
+  onProgress?: (received: number, total: number) => void
 ): Promise<InstalledExtension> {
-  let buffer = await readSource(source);
+  let buffer = await readSource(source, onProgress);
   // The VS Code Marketplace serves gzipped packages; Open VSX serves plain VSIX.
   if (buffer.length > 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) {
     buffer = gunzipSync(buffer);
@@ -72,12 +73,29 @@ export async function uninstallExtension(extensionsDir: string, id: string): Pro
   return false;
 }
 
-async function readSource(source: { path?: string; url?: string; data?: Buffer }): Promise<Buffer> {
+async function readSource(
+  source: { path?: string; url?: string; data?: Buffer },
+  onProgress?: (received: number, total: number) => void
+): Promise<Buffer> {
   if (source.data) return source.data;
   if (source.url) {
     const response = await fetch(source.url);
     if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText}`);
-    return Buffer.from(await response.arrayBuffer());
+    const total = Number(response.headers.get("content-length") || 0);
+    if (!response.body || !onProgress) {
+      return Buffer.from(await response.arrayBuffer());
+    }
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      onProgress(received, total);
+    }
+    return Buffer.concat(chunks);
   }
   if (source.path) return fs.readFile(source.path);
   throw new Error("Provide a VSIX path, url or data");

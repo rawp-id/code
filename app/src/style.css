@@ -685,6 +685,30 @@ body {
   outline: none;
 }
 
+.ext-icon-btn {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #3c3c3c;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+
+.ext-icon-btn:hover {
+  background: #4a4a4a;
+  color: var(--fg);
+}
+
+.ext-icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
 .ext-tabs {
   display: flex;
   gap: 2px;

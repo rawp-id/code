@@ -26,6 +26,7 @@ export const icons = {
     `<path d="M2 3.8h3.5l1.1 1.4h7.4v3.4"/><path d="M2 3.8v8.4h4.6"/><path d="M11.5 9.6v4.4M9.3 11.8h4.4"/>`
   ),
   refresh: outline(`<path d="M13 8a5 5 0 1 1-1.5-3.6"/><path d="M13.2 3.2v3h-3"/>`),
+  power: outline(`<path d="M8 2.2v5.4"/><path d="M4.7 4.4a4.7 4.7 0 1 0 6.6 0"/>`),
   openFolder: outline(
     `<path d="M1.9 3.6h3.8l1.2 1.5h7.2v7.3H1.9z"/><path d="M8 11.6V6.6"/><path d="M5.9 8.6L8 6.5l2.1 2.1"/>`
   ),
@@ -53,6 +54,8 @@ export interface ExtensionIconTheme {
   folderExpanded?: string;
   fileNames: Record<string, string>;
   fileExtensions: Record<string, string>;
+  folderNames?: Record<string, string>;
+  folderNamesExpanded?: Record<string, string>;
 }
 
 let extensionIconTheme: ExtensionIconTheme | null = null;
@@ -69,15 +72,22 @@ export function setExtensionIconTheme(theme: ExtensionIconTheme | null): void {
 export function iconFor(name: string, type: "file" | "dir", expanded = false): string | null {
   if (!extensionIconTheme) return null;
   if (type === "dir") {
+    const named = expanded
+      ? extensionIconTheme.folderNamesExpanded?.[name] || extensionIconTheme.folderNames?.[name]
+      : extensionIconTheme.folderNames?.[name];
+    if (named) return named;
     const folder = expanded
       ? extensionIconTheme.folderExpanded || extensionIconTheme.folder
       : extensionIconTheme.folder;
     return folder || null;
   }
   if (extensionIconTheme.fileNames[name]) return extensionIconTheme.fileNames[name];
-  const dot = name.lastIndexOf(".");
-  const ext = dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
-  if (ext && extensionIconTheme.fileExtensions[ext]) return extensionIconTheme.fileExtensions[ext];
+  const parts = name.split(".");
+  for (let i = 1; i < parts.length; i++) {
+    const candidate = parts.slice(i).join(".").toLowerCase();
+    const url = extensionIconTheme.fileExtensions[candidate];
+    if (url) return url;
+  }
   return extensionIconTheme.file || null;
 }
 

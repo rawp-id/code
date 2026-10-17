@@ -419,6 +419,10 @@ bus.on("editor.close", schedulePersist);
 bus.on("editor.active", schedulePersist);
 bus.on("tree.changed", schedulePersist);
 editor.onDidChange(schedulePersist);
+bus.on("icons.changed", () => {
+  void filetree.refresh();
+  editor.refreshTabs();
+});
 bus.on("workspace.changed", ({ root }: { root: string }) => {
   workspaceRoot = root;
   editor.closeAll();

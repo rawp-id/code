@@ -293,6 +293,15 @@ export class ExtensionHost {
     await this.saveDisabled();
   }
 
+  /** Deactivate everything and re-scan (Extensions: Restart). */
+  async restart(): Promise<void> {
+    for (const id of [...this.activated]) {
+      await this.deactivate(id).catch(() => undefined);
+    }
+    this.markUnscanned();
+    await this.scan();
+  }
+
   private async loadDisabled(): Promise<void> {
     try {
       const raw = JSON.parse(await fs.readFile(path.join(this.dir, ".disabled.json"), "utf8"));
@@ -453,6 +462,7 @@ export class ExtensionHost {
     if (!this.scanned) await this.scan();
     const out: { id: string; label: string; extensionId: string; path: string }[] = [];
     for (const ext of this.extensions.values()) {
+      if (this.disabled.has(ext.id)) continue;
       for (const theme of ext.manifest?.contributes?.themes || []) {
         if (!theme?.path) continue;
         out.push({
@@ -472,6 +482,7 @@ export class ExtensionHost {
     if (!this.scanned) await this.scan();
     const out: { id: string; label: string; extensionId: string; path: string }[] = [];
     for (const ext of this.extensions.values()) {
+      if (this.disabled.has(ext.id)) continue;
       for (const theme of ext.manifest?.contributes?.iconThemes || []) {
         if (!theme?.path) continue;
         out.push({
@@ -525,6 +536,8 @@ export class ExtensionHost {
       folderExpanded: toUrl(theme.folderExpanded),
       fileNames: mapDefs(theme.fileNames || {}),
       fileExtensions: mapDefs(theme.fileExtensions || {}, true),
+      folderNames: mapDefs(theme.folderNames || {}),
+      folderNamesExpanded: mapDefs(theme.folderNamesExpanded || {}),
     };
   }
 

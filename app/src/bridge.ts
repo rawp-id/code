@@ -92,7 +92,7 @@ export class Bridge {
     this.handlers.set(method, handler);
   }
 
-  request<T = any>(method: string, params?: any): Promise<T> {
+  request<T = any>(method: string, params?: any, timeoutMs = 60000): Promise<T> {
     const id = this.seq++;
     const message = JSON.stringify({ id, method, params });
     return new Promise<T>((resolve, reject) => {
@@ -101,7 +101,7 @@ export class Bridge {
       else this.queue.push(message);
       setTimeout(() => {
         if (this.pending.delete(id)) reject(new Error(`Request timed out: ${method}`));
-      }, 60000);
+      }, timeoutMs);
     });
   }
 
