@@ -1,3 +1,5 @@
+import { icons } from "./icons";
+
 export interface Layout {
   root: HTMLElement;
   titleName: HTMLElement;
@@ -25,8 +27,8 @@ export function createLayout(root: HTMLElement): Layout {
         <span class="conn"><span class="dot" data-dot></span><span data-conn>connecting</span></span>
       </div>
       <div class="activitybar" data-activity>
-        <button data-view="files" class="active" title="Explorer">🗂</button>
-        <button data-view="extensions" title="Extensions">🧩</button>
+        <button data-view="files" class="active" title="Explorer">${icons.explorer}</button>
+        <button data-view="extensions" title="Extensions">${icons.extensions}</button>
       </div>
       <div class="main">
         <div class="sidebar" data-sidebar>
@@ -41,7 +43,7 @@ export function createLayout(root: HTMLElement): Layout {
               <span class="panel-tab active" data-panel-tab="terminal">Terminal</span>
               <span class="panel-tab" data-panel-tab="output">Output</span>
               <span class="spacer"></span>
-              <button class="close" data-panel-close title="Close panel">✕</button>
+              <button class="close" data-panel-close title="Close panel">${icons.close}</button>
             </div>
             <div class="panel-body" data-panel-body="terminal">
               <div class="terminal-host" data-terminal></div>

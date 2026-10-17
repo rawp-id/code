@@ -127,38 +127,6 @@ export class EditorManager {
       oneDark,
       ...spec.extensions,
       keymap.of([
-        {
-          key: "Mod-s",
-          preventDefault: true,
-          run: () => {
-            bus.emit("file.save");
-            return true;
-          },
-        },
-        {
-          key: "Mod-Shift-p",
-          preventDefault: true,
-          run: () => {
-            bus.emit("palette.open");
-            return true;
-          },
-        },
-        {
-          key: "Ctrl-`",
-          preventDefault: true,
-          run: () => {
-            bus.emit("panel.toggle");
-            return true;
-          },
-        },
-        {
-          key: "Mod-b",
-          preventDefault: true,
-          run: () => {
-            bus.emit("sidebar.toggle");
-            return true;
-          },
-        },
         ...closeBracketsKeymap,
         ...defaultKeymap,
         ...searchKeymap,

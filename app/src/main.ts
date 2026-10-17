@@ -310,16 +310,45 @@ bridge.handleRequest("editor.saveDocument", (params) =>
 );
 bridge.handleRequest("editor.showDocument", (params) => editor.showDocument(fromUri(params.uri)));
 
-document.addEventListener("keydown", (event) => {
-  const mod = event.ctrlKey || event.metaKey;
-  if (mod && event.shiftKey && event.key.toLowerCase() === "p") {
-    event.preventDefault();
-    palette.open();
-  } else if (mod && event.key === "`") {
-    event.preventDefault();
-    togglePanel();
-  }
-});
+// Global shortcuts are handled here in the capture phase so the editor and the
+// terminal cannot also act on them (which previously double-toggled the panel).
+document.addEventListener(
+  "keydown",
+  (event) => {
+    const mod = event.ctrlKey || event.metaKey;
+    if (!mod) return;
+    const key = event.key.toLowerCase();
+    const backquote = event.code === "Backquote" || event.key === "`";
+
+    if (event.shiftKey && key === "p") {
+      event.preventDefault();
+      event.stopPropagation();
+      palette.open();
+      return;
+    }
+    if (backquote) {
+      event.preventDefault();
+      event.stopPropagation();
+      togglePanel();
+      return;
+    }
+    if (!event.shiftKey && key === "s") {
+      event.preventDefault();
+      event.stopPropagation();
+      editor
+        .save()
+        .then(() => toast("info", "Saved"))
+        .catch((error: any) => toast("error", error?.message));
+      return;
+    }
+    if (!event.shiftKey && key === "b") {
+      event.preventDefault();
+      event.stopPropagation();
+      layout.sidebar.classList.toggle("hidden");
+    }
+  },
+  true
+);
 
 bridge.on("status", ({ connected, url }) => {
   layout.connDot.classList.toggle("ok", connected);

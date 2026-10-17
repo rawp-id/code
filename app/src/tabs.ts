@@ -1,4 +1,5 @@
 import type { EditorManager } from "./editor";
+import { icons } from "./icons";
 
 export class TabsView {
   constructor(private el: HTMLElement, private editor: EditorManager) {
@@ -25,7 +26,8 @@ export class TabsView {
 
       const close = document.createElement("button");
       close.className = "close";
-      close.textContent = "✕";
+      close.innerHTML = icons.close;
+      close.title = "Close";
       close.onclick = (event) => {
         event.stopPropagation();
         this.editor.close(doc.path);

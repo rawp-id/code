@@ -1,20 +1,21 @@
 import { bridge, type DirEntry, type ExtensionInfo } from "./bridge";
-
-function setLabel(row: HTMLElement, icon: string, name: string, depth: number): void {
-  row.textContent = `${icon} ${name}`;
-  row.style.paddingLeft = `${8 + depth * 12}px`;
-}
+import { bus } from "./bus";
+import { icons } from "./icons";
 
 export class FileTree {
   private expanded = new Set<string>();
-  private selected: HTMLElement | null = null;
+  private rows = new Map<string, HTMLElement>();
+  private activePath: string | null = null;
 
-  constructor(private el: HTMLElement, private onOpen: (path: string) => void) {}
+  constructor(private el: HTMLElement, private onOpen: (path: string) => void) {
+    bus.on("editor.active", ({ path }: { path: string }) => this.setActive(path));
+  }
 
   async refresh(): Promise<void> {
     this.el.innerHTML = "";
-    this.selected = null;
+    this.rows.clear();
     await this.renderInto("", this.el, 0);
+    if (this.activePath) this.setActive(this.activePath);
   }
 
   private async renderInto(path: string, container: HTMLElement, depth: number): Promise<void> {
@@ -27,29 +28,70 @@ export class FileTree {
     }
 
     for (const entry of entries) {
-      const row = document.createElement("div");
-      row.className = "tree-row";
+      const row = this.makeRow(entry, depth);
+      this.rows.set(entry.path, row);
+
       if (entry.type === "dir") {
         const child = document.createElement("div");
         child.className = "tree-children";
         child.style.display = "none";
-        const open = this.expanded.has(entry.path);
-        setLabel(row, open ? "▾" : "▸", entry.name, depth);
         row.onclick = () => this.toggle(entry, row, child, depth);
         container.append(row, child);
-        if (open) {
+        if (this.expanded.has(entry.path)) {
           child.style.display = "block";
           child.dataset.loaded = "1";
           await this.renderInto(entry.path, child, depth + 1);
         }
       } else {
-        setLabel(row, " ", entry.name, depth);
         row.onclick = () => {
-          this.select(row);
+          this.setActive(entry.path);
           this.onOpen(entry.path);
         };
         container.append(row);
       }
+    }
+  }
+
+  private makeRow(entry: DirEntry, depth: number): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "tree-row";
+    row.dataset.path = entry.path;
+    row.style.paddingLeft = `${6 + depth * 12}px`;
+
+    const chevron = document.createElement("span");
+    chevron.className = "tree-chevron";
+    if (entry.type === "dir") {
+      chevron.innerHTML = this.expanded.has(entry.path)
+        ? icons.chevronDown
+        : icons.chevronRight;
+    }
+
+    const icon = document.createElement("span");
+    icon.className = `tree-icon ${entry.type}`;
+    icon.innerHTML =
+      entry.type === "dir"
+        ? this.expanded.has(entry.path)
+          ? icons.folderOpen
+          : icons.folder
+        : icons.file;
+
+    const label = document.createElement("span");
+    label.className = "tree-label";
+    label.textContent = entry.name;
+
+    row.append(chevron, icon, label);
+    return row;
+  }
+
+  private updateIcon(entry: DirEntry, row: HTMLElement): void {
+    const open = this.expanded.has(entry.path);
+    const chevron = row.querySelector(".tree-chevron");
+    const icon = row.querySelector(".tree-icon");
+    if (chevron && entry.type === "dir") {
+      chevron.innerHTML = open ? icons.chevronDown : icons.chevronRight;
+    }
+    if (icon && entry.type === "dir") {
+      icon.innerHTML = open ? icons.folderOpen : icons.folder;
     }
   }
 
@@ -62,22 +104,22 @@ export class FileTree {
     if (this.expanded.has(entry.path)) {
       this.expanded.delete(entry.path);
       child.style.display = "none";
-      setLabel(row, "▸", entry.name, depth);
-      return;
+    } else {
+      this.expanded.add(entry.path);
+      child.style.display = "block";
+      if (!child.dataset.loaded) {
+        child.dataset.loaded = "1";
+        await this.renderInto(entry.path, child, depth + 1);
+      }
     }
-    this.expanded.add(entry.path);
-    child.style.display = "block";
-    setLabel(row, "▾", entry.name, depth);
-    if (!child.dataset.loaded) {
-      child.dataset.loaded = "1";
-      await this.renderInto(entry.path, child, depth + 1);
-    }
+    this.updateIcon(entry, row);
   }
 
-  private select(row: HTMLElement): void {
-    this.selected?.classList.remove("selected");
-    row.classList.add("selected");
-    this.selected = row;
+  setActive(path: string): void {
+    this.activePath = path;
+    for (const [rowPath, row] of this.rows) {
+      row.classList.toggle("active", rowPath === path);
+    }
   }
 }
 
