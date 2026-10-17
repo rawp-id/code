@@ -273,8 +273,8 @@ export class ExtensionsView {
     if (this.tab === "installed") {
       for (const [value, label] of [
         ["all", "All"],
-        ["active", "Active"],
-        ["inactive", "Inactive"],
+        ["active", "Enabled"],
+        ["inactive", "Disabled"],
       ] as [InstalledFilter, string][]) {
         const chip = document.createElement("button");
         chip.className = "ext-chip" + (this.installedFilter === value ? " active" : "");
