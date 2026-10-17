@@ -230,6 +230,18 @@ export class EditorManager {
     return true;
   }
 
+  /** Open a file and put the cursor at a 1-based line / 0-based column. */
+  async openAt(path: string, line = 1, column = 0): Promise<void> {
+    await this.open(path);
+    if (!this.docs.has(path)) return;
+    const state = this.view.state;
+    const lineNumber = Math.min(Math.max(line, 1), state.doc.lines);
+    const info = state.doc.line(lineNumber);
+    const position = Math.min(info.from + Math.max(column, 0), info.to);
+    this.view.dispatch({ selection: { anchor: position }, scrollIntoView: true });
+    this.view.focus();
+  }
+
   applyEdits(uri: string, edits: any[]): boolean {
     const path = uri.replace(/^file:\/\//, "");
     if (!this.docs.has(path)) return false;

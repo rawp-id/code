@@ -6,6 +6,7 @@ import { PtyManager } from "./pty.js";
 import { ExtensionHost, type UiBridge } from "./ext-host/host.js";
 import { installVsix, uninstallExtension } from "./ext-host/installer.js";
 import { LspManager } from "./lsp/manager.js";
+import { searchWorkspace } from "./search.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(HERE, "..");
@@ -104,6 +105,8 @@ export function handleConnection(ws: WebSocket): void {
     "fs.mkdir": ({ path: rel }: { path: string }) => workspace.mkdir(rel),
     "fs.rename": ({ from, to }: { from: string; to: string }) => workspace.rename(from, to),
     "fs.delete": ({ path: rel }: { path: string }) => workspace.delete(rel),
+
+    "ws.search": (params: any) => searchWorkspace(workspace.root, params),
 
     "doc.open": ({ uri, languageId, text }: { uri: string; languageId: string; text: string }) => {
       host.openDocument(uri, languageId, text);

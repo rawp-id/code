@@ -13,6 +13,7 @@ export const icons = {
     `<path d="M2.6 2.6h4v4h-4z"/><path d="M9.4 2.6h4v4h-4z"/><path d="M2.6 9.4h4v4h-4z"/><path d="M9.4 9.4h1.6a2.4 2.4 0 1 1 2.4 2.4v1.6h-4z"/>`,
     22
   ),
+  search: outline(`<circle cx="7.2" cy="7.2" r="4.2"/><path d="M10.4 10.4L14 14"/>`, 22),
   chevronRight: outline(`<path d="M6 3.5L10.5 8 6 12.5"/>`, 14),
   chevronDown: outline(`<path d="M3.5 6L8 10.5 12.5 6"/>`, 14),
   folder: outline(`<path d="M1.9 3.6h3.8l1.2 1.5h7.2v7.3H1.9z"/>`),

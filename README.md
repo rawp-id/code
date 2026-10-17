@@ -14,6 +14,9 @@ server/   Node process: workspace FS, terminal (pty), extension host, LSP
 - File explorer, tabs, save (`Ctrl+S`), dirty indicators, status bar.
 - Syntax highlighting for JS/TS, JSON, HTML, CSS, Markdown, Python.
 - Command palette (`Ctrl+Shift+P`) with built-in and extension commands.
+- **Search in files** — sidebar search view (`Ctrl+Shift+F`) with case, regex and
+  whole-word options; results are grouped per file and clicking one opens the
+  file at that line.
 - Integrated terminal (`Ctrl+`` `) rendered with **xterm.js**, backed by a pty
   (`node-pty`, or a bundled Python pty bridge when it cannot build).
 - **Extension host** that loads CommonJS VS Code extensions and serves a

@@ -5,6 +5,7 @@ import { createLayout } from "./layout";
 import { EditorManager } from "./editor";
 import { TabsView } from "./tabs";
 import { FileTree, ExtensionsView } from "./sidebar";
+import { SearchView } from "./searchview";
 import { CommandPalette, showInputBox, showQuickPick, type Command } from "./palette";
 import { initConnectionUi, openConnectionDialog } from "./connect";
 import { isNativePlatform, KodeServer } from "./native";
@@ -19,9 +20,11 @@ const editor = new EditorManager(layout.editorHost);
 new TabsView(layout.tabs, editor);
 
 const filesEl = document.createElement("div");
+const searchEl = document.createElement("div");
 const extensionsEl = document.createElement("div");
+searchEl.style.display = "none";
 extensionsEl.style.display = "none";
-layout.sideBody.append(filesEl, extensionsEl);
+layout.sideBody.append(filesEl, searchEl, extensionsEl);
 
 const filetree = new FileTree(filesEl, (path) => {
   editor.open(path).catch((error: any) => toast("error", `Could not open ${path}: ${error?.message}`));
@@ -33,8 +36,11 @@ const extensionsView = new ExtensionsView(extensionsEl, (extensionId, command) =
 
 const palette = new CommandPalette();
 const terminal = new TerminalPanel(layout.terminalHost);
+const search = new SearchView(searchEl, (path, line, column) =>
+  editor.openAt(path, line, column).catch((error: any) => toast("error", error?.message))
+);
 
-let activeView: "files" | "extensions" = "files";
+let activeView: "files" | "search" | "extensions" = "files";
 let panelView: "terminal" | "output" = "terminal";
 
 function updateActivityBar(): void {
@@ -46,11 +52,14 @@ function updateActivityBar(): void {
     );
 }
 
-function setSidebarView(view: "files" | "extensions"): void {
+function setSidebarView(view: "files" | "search" | "extensions"): void {
   activeView = view;
-  layout.sideTitle.textContent = view === "files" ? "Explorer" : "Extensions";
+  layout.sideTitle.textContent =
+    view === "files" ? "Explorer" : view === "search" ? "Search" : "Extensions";
   filesEl.style.display = view === "files" ? "" : "none";
+  searchEl.style.display = view === "search" ? "" : "none";
   extensionsEl.style.display = view === "extensions" ? "" : "none";
+  if (view === "search") search.focus();
   updateActivityBar();
 }
 
@@ -132,6 +141,7 @@ const builtinCommands: Command[] = [
   { id: "view.terminal", title: "View: Toggle Terminal", hint: "Ctrl+`", run: () => togglePanel() },
   { id: "view.sidebar", title: "View: Toggle Sidebar", hint: "Ctrl+B", run: () => toggleSidebar() },
   { id: "view.explorer", title: "View: Show Explorer", run: () => { toggleSidebar(false); setSidebarView("files"); } },
+  { id: "view.search", title: "View: Show Search", hint: "Ctrl+Shift+F", run: () => { toggleSidebar(false); setSidebarView("search"); } },
   { id: "view.extensions", title: "View: Show Extensions", run: () => { toggleSidebar(false); setSidebarView("extensions"); } },
   { id: "ext.refresh", title: "Extensions: Refresh", run: () => refreshExtensions() },
   {
@@ -217,7 +227,7 @@ palette.setCommands(builtinCommands);
 layout.activityBar.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-view]");
   if (!button || !button.dataset.view) return;
-  const view = button.dataset.view as "files" | "extensions";
+  const view = button.dataset.view as "files" | "search" | "extensions";
   const hidden = layout.sidebar.classList.contains("hidden");
   if (!hidden && activeView === view) {
     toggleSidebar(true);
@@ -304,6 +314,13 @@ document.addEventListener(
       event.preventDefault();
       event.stopPropagation();
       palette.open();
+      return;
+    }
+    if (event.shiftKey && key === "f") {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleSidebar(false);
+      setSidebarView("search");
       return;
     }
     if (backquote) {
