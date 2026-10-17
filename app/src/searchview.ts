@@ -1,4 +1,6 @@
-import { bridge } from "./bridge";
+import { bridge, httpBase } from "./bridge";
+import { icons, fileColor, iconFor } from "./icons";
+import { languageIdFor } from "./lang";
 
 interface SearchMatch {
   line: number;
@@ -18,14 +20,14 @@ interface SearchResult {
   truncated: boolean;
 }
 
+type Flag = "case" | "regex" | "word";
+
 export class SearchView {
   private input: HTMLInputElement;
-  private caseEl: HTMLInputElement;
-  private regexEl: HTMLInputElement;
-  private wordEl: HTMLInputElement;
   private summaryEl: HTMLElement;
   private resultsEl: HTMLElement;
   private timer: number | undefined;
+  private flags: Record<Flag, boolean> = { case: false, regex: false, word: false };
 
   constructor(
     private el: HTMLElement,
@@ -36,9 +38,9 @@ export class SearchView {
         <div class="search-inputs">
           <input type="text" spellcheck="false" placeholder="Search" data-search-input />
           <div class="search-flags">
-            <label title="Match case"><input type="checkbox" data-search-case />Aa</label>
-            <label title="Use regular expression"><input type="checkbox" data-search-regex />.*</label>
-            <label title="Match whole word"><input type="checkbox" data-search-word />ab</label>
+            <button class="search-flag" data-flag="case" title="Match Case">Aa</button>
+            <button class="search-flag" data-flag="regex" title="Use Regular Expression">.*</button>
+            <button class="search-flag" data-flag="word" title="Match Whole Word">ab</button>
           </div>
         </div>
         <div class="search-summary" data-search-summary></div>
@@ -46,9 +48,6 @@ export class SearchView {
       </div>
     `;
     this.input = this.el.querySelector<HTMLInputElement>("[data-search-input]")!;
-    this.caseEl = this.el.querySelector<HTMLInputElement>("[data-search-case]")!;
-    this.regexEl = this.el.querySelector<HTMLInputElement>("[data-search-regex]")!;
-    this.wordEl = this.el.querySelector<HTMLInputElement>("[data-search-word]")!;
     this.summaryEl = this.el.querySelector<HTMLElement>("[data-search-summary]")!;
     this.resultsEl = this.el.querySelector<HTMLElement>("[data-search-results]")!;
 
@@ -59,8 +58,14 @@ export class SearchView {
         this.run();
       }
     });
-    for (const box of [this.caseEl, this.regexEl, this.wordEl]) {
-      box.addEventListener("change", () => this.run());
+
+    for (const button of this.el.querySelectorAll<HTMLButtonElement>("[data-flag]")) {
+      button.addEventListener("click", () => {
+        const flag = button.dataset.flag as Flag;
+        this.flags[flag] = !this.flags[flag];
+        button.classList.toggle("active", this.flags[flag]);
+        void this.run();
+      });
     }
   }
 
@@ -84,9 +89,9 @@ export class SearchView {
     try {
       const result = await bridge.request<SearchResult>("ws.search", {
         query,
-        caseSensitive: this.caseEl.checked,
-        regex: this.regexEl.checked,
-        wholeWord: this.wordEl.checked,
+        caseSensitive: this.flags.case,
+        regex: this.flags.regex,
+        wholeWord: this.flags.word,
       });
       if (this.input.value !== query) return; // a newer query is in flight
       this.render(result);
@@ -94,6 +99,23 @@ export class SearchView {
       this.summaryEl.textContent = `Search failed: ${error?.message}`;
       this.resultsEl.innerHTML = "";
     }
+  }
+
+  private fileIcon(path: string): HTMLElement {
+    const icon = document.createElement("span");
+    icon.className = "search-file-icon";
+    const name = path.split("/").pop() || path;
+    const themed = iconFor(name, "file", false, languageIdFor(path));
+    if (themed) {
+      const img = document.createElement("img");
+      img.src = `${httpBase()}${themed}`;
+      img.alt = "";
+      icon.append(img);
+    } else {
+      icon.innerHTML = icons.file;
+      icon.style.color = fileColor(name);
+    }
+    return icon;
   }
 
   private render(result: SearchResult): void {
@@ -111,13 +133,22 @@ export class SearchView {
 
       const header = document.createElement("div");
       header.className = "search-file-header";
+      header.title = file.path;
+
       const name = document.createElement("span");
       name.className = "search-file-name";
-      name.textContent = file.path;
+      name.textContent = file.path.split("/").pop() || file.path;
+
+      const dir = document.createElement("span");
+      dir.className = "search-file-dir";
+      const slash = file.path.lastIndexOf("/");
+      dir.textContent = slash >= 0 ? file.path.slice(0, slash) : "";
+
       const count = document.createElement("span");
       count.className = "search-file-count";
       count.textContent = String(file.matches.length);
-      header.append(name, count);
+
+      header.append(this.fileIcon(file.path), name, dir, count);
       header.onclick = () =>
         this.onOpen(file.path, file.matches[0].line, file.matches[0].column);
       group.append(header);
