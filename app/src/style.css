@@ -1371,23 +1371,68 @@ body {
   height: 14px;
 }
 
-.settings-detail-title {
-  padding: 4px 12px 2px;
-  font-size: 15px;
-  font-weight: 600;
+.settings-detail {
+  padding-bottom: 24px;
 }
 
-.settings-detail-row {
-  padding: 4px 12px 10px;
+.settings-detail-header {
+  padding: 2px 12px 12px;
+}
+
+.settings-detail-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.settings-detail-desc {
+  color: var(--fg-dim);
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+.settings-detail-field {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-field-label {
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+  margin-bottom: 6px;
+}
+
+.settings-detail-field .setting-control {
+  width: 100%;
+}
+
+.settings-detail-field .setting-control input[type="text"],
+.settings-detail-field .setting-control input[type="number"],
+.settings-detail-field .setting-control select,
+.settings-detail-field .setting-control textarea {
+  width: 100%;
+}
+
+.settings-detail-actions {
+  padding: 4px 12px 12px;
+}
+
+.settings-detail-actions .ext-btn {
+  width: 100%;
+  padding: 7px 12px;
 }
 
 .settings-code {
-  margin: 8px 12px;
+  margin: 0 12px 12px;
   padding: 10px;
   background: #2d2d2d;
   border-radius: 4px;
   font-family: var(--mono);
   font-size: 11px;
+  line-height: 1.5;
   overflow: auto;
   white-space: pre;
 }

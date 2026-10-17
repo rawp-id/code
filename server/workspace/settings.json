@@ -1,13 +1,59 @@
 {
   "editor": {
+    "fontSize": 14,
     "tabSize": 2,
-    "insertSpaces": true,
-    "fontSize": 14
+    "wordWrap": "off",
+    "lineNumbers": true,
+    "highlightActiveLine": true,
+    "autoSave": "off",
+    "autoSaveDelay": 1000,
+    "colorTheme": "dark-plus",
+    "insertSpaces": true
+  },
+  "files": {
+    "exclude": [
+      "node_modules",
+      ".git",
+      "dist",
+      "build",
+      ".cache",
+      ".next",
+      "vendor",
+      "target",
+      "coverage",
+      ".gradle",
+      ".idea",
+      ".dart_tool",
+      "Pods"
+    ]
+  },
+  "search": {
+    "exclude": [
+      "node_modules",
+      ".git",
+      "dist",
+      "build",
+      ".cache",
+      ".next",
+      "vendor",
+      "target",
+      "coverage",
+      ".gradle",
+      ".idea",
+      ".dart_tool",
+      "Pods"
+    ],
+    "maxResults": 1000
+  },
+  "terminal": {
+    "fontSize": 13,
+    "prompt": "\\u@\\h \\w \\$ "
+  },
+  "workbench": {
+    "sidebarWidth": 240,
+    "iconTheme": "default"
   },
   "textTools": {
     "greeting": "Hello from settings.json"
-  },
-  "terminal": {
-    "prompt": "\\u@\\h \\w \\$ "
   }
 }

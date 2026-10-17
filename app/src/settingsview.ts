@@ -273,21 +273,28 @@ export class SettingsView {
   }
 
   private renderDetail(id: string): void {
+    const wrap = document.createElement("div");
+    wrap.className = "settings-detail";
+    wrap.append(this.backButton());
+
     if (id.startsWith("lsp:")) {
       const language = id.slice(4);
       const spec = this.lspConfig[language];
-      this.bodyEl.append(this.backButton());
+      const header = document.createElement("div");
+      header.className = "settings-detail-header";
       const title = document.createElement("div");
       title.className = "settings-detail-title";
       title.textContent = `Language server: ${language}`;
+      const note = document.createElement("div");
+      note.className = "settings-detail-desc";
+      note.textContent =
+        "Configure servers in lsp.config.json (workspace root or server package).";
+      header.append(title, note);
       const pre = document.createElement("pre");
       pre.className = "settings-code";
       pre.textContent = JSON.stringify(spec ?? {}, null, 2);
-      const note = document.createElement("div");
-      note.className = "setting-desc";
-      note.textContent =
-        "Configure servers in lsp.config.json (workspace root or server package).";
-      this.bodyEl.append(title, note, pre);
+      wrap.append(header, pre);
+      this.bodyEl.append(wrap);
       return;
     }
 
@@ -298,23 +305,28 @@ export class SettingsView {
       return;
     }
 
-    this.bodyEl.append(this.backButton());
-
+    const header = document.createElement("div");
+    header.className = "settings-detail-header";
     const title = document.createElement("div");
     title.className = "settings-detail-title";
     title.textContent = def.label;
-
-    const info = document.createElement("div");
-    info.className = "settings-detail-row";
     const description = document.createElement("div");
-    description.className = "setting-desc";
+    description.className = "settings-detail-desc";
     description.textContent = def.description || def.id;
-    info.append(description);
+    header.append(title, description);
 
+    const field = document.createElement("div");
+    field.className = "settings-detail-field";
+    const fieldLabel = document.createElement("div");
+    fieldLabel.className = "settings-field-label";
+    fieldLabel.textContent = "Value";
     const control = document.createElement("div");
     control.className = "setting-control";
     control.append(this.control(def));
+    field.append(fieldLabel, control);
 
+    const actions = document.createElement("div");
+    actions.className = "settings-detail-actions";
     const reset = document.createElement("button");
     reset.className = "ext-btn";
     reset.textContent = "Reset to default";
@@ -322,8 +334,10 @@ export class SettingsView {
       this.update(def.id, structuredClone(getPath(DEFAULT_SETTINGS, def.id)));
       this.render();
     };
+    actions.append(reset);
 
-    this.bodyEl.append(title, info, control, reset);
+    wrap.append(header, field, actions);
+    this.bodyEl.append(wrap);
   }
 
   private heading(text: string): HTMLElement {
