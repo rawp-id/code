@@ -368,7 +368,7 @@ body {
   background: var(--bg-tab);
   overflow-x: auto;
   overflow-y: hidden;
-  min-height: 35px;
+  min-height: 28px;
   scrollbar-width: thin;
   scrollbar-color: #5a5a5a transparent;
 }
@@ -389,9 +389,9 @@ body {
 .tab {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  height: 35px;
+  gap: 6px;
+  padding: 0 8px;
+  height: 28px;
   border-right: 1px solid var(--border);
   color: var(--fg-dim);
   cursor: pointer;
@@ -1707,12 +1707,12 @@ body {
 
   /* Tabs */
   .tabs {
-    min-height: 38px;
+    min-height: 32px;
   }
   .tab {
-    height: 38px;
-    padding: 0 12px;
-    gap: 8px;
+    height: 32px;
+    padding: 0 10px;
+    gap: 6px;
   }
   .tab .close {
     padding: 5px;
