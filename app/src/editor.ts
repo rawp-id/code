@@ -27,6 +27,7 @@ import {
   closeBrackets,
   closeBracketsKeymap,
   completionKeymap,
+  startCompletion,
   type Completion,
   type CompletionContext,
 } from "@codemirror/autocomplete";
@@ -219,6 +220,13 @@ export class EditorManager {
   async saveDocument(path: string): Promise<boolean> {
     await this.save(path);
     return true;
+  }
+
+  /** Open the completion popup at the cursor (Ctrl+Space). */
+  triggerSuggest(): void {
+    if (!this.active) return;
+    this.view.focus();
+    startCompletion(this.view);
   }
 
   showDocument(path: string): boolean {

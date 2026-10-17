@@ -153,6 +153,7 @@ async function runExtensionCommand(extensionId: string, command: string): Promis
 
 const builtinCommands: Command[] = [
   { id: "file.save", title: "File: Save", hint: "Ctrl+S", run: () => editor.save().then(() => toast("info", "Saved")) },
+  { id: "editor.suggest", title: "Editor: Trigger Suggest", hint: "Ctrl+Space", run: () => editor.triggerSuggest() },
   { id: "file.refresh", title: "File: Refresh Explorer", run: () => filetree.refresh() },
   { id: "view.terminal", title: "View: Toggle Terminal", hint: "Ctrl+`", run: () => togglePanel() },
   { id: "view.sidebar", title: "View: Toggle Sidebar", hint: "Ctrl+B", run: () => toggleSidebar() },
@@ -325,6 +326,12 @@ bridge.handleRequest("editor.showDocument", (params) => editor.showDocument(from
 document.addEventListener(
   "keydown",
   (event) => {
+    if (event.altKey && event.code === "Backquote") {
+      event.preventDefault();
+      event.stopPropagation();
+      editor.triggerSuggest();
+      return;
+    }
     const mod = event.ctrlKey || event.metaKey;
     if (!mod) return;
     const key = event.key.toLowerCase();
@@ -347,6 +354,12 @@ document.addEventListener(
       event.preventDefault();
       event.stopPropagation();
       togglePanel();
+      return;
+    }
+    if (event.code === "Space" && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      editor.triggerSuggest();
       return;
     }
     if (!event.shiftKey && key === "s") {
