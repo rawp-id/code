@@ -230,6 +230,25 @@ export class EditorManager {
     return true;
   }
 
+  /** Re-key an open document after the file was renamed on disk. */
+  renamePath(from: string, to: string): void {
+    const doc = this.docs.get(from);
+    if (!doc) return;
+    this.docs.delete(from);
+    doc.path = to;
+    doc.languageId = languageFor(to).languageId;
+    this.docs.set(to, doc);
+    if (this.active === from) this.active = to;
+    bus.emit("editor.close", { path: from });
+    bus.emit("editor.open", {
+      path: to,
+      languageId: doc.languageId,
+      text: doc.state.doc.toString(),
+    });
+    bus.emit("editor.active", { path: to, languageId: doc.languageId });
+    this.fire();
+  }
+
   /** Open a file and put the cursor at a 1-based line / 0-based column. */
   async openAt(path: string, line = 1, column = 0): Promise<void> {
     await this.open(path);

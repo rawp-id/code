@@ -11,7 +11,9 @@ server/   Node process: workspace FS, terminal (pty), extension host, LSP
 
 ## What works right now
 
-- File explorer, tabs, save (`Ctrl+S`), dirty indicators, status bar.
+- File explorer with a toolbar (**New File, New Folder, Refresh, Open Folder**)
+  and a right-click menu (**Rename, Delete**); tabs, save (`Ctrl+S`), dirty
+  indicators.
 - Syntax highlighting for JS/TS, JSON, HTML, CSS, Markdown, Python.
 - Command palette (`Ctrl+Shift+P`) with built-in and extension commands.
 - **Search in files** — sidebar search view (`Ctrl+Shift+F`) with case, regex and

@@ -120,6 +120,70 @@ body {
   padding-bottom: 12px;
 }
 
+.tree-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  gap: 2px;
+  padding: 3px 6px;
+  background: var(--bg-side);
+  border-bottom: 1px solid var(--border);
+}
+
+.tree-toolbar button {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.tree-toolbar button:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.tree-toolbar button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.tree-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 140px;
+  padding: 4px 0;
+  background: #252526;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+.tree-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--fg);
+}
+
+.tree-menu-item:hover {
+  background: var(--selected);
+}
+
+.tree-menu-item svg {
+  width: 14px;
+  height: 14px;
+}
+
 .tree-row {
   display: flex;
   align-items: center;

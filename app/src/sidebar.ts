@@ -1,21 +1,148 @@
 import { bridge, type DirEntry } from "./bridge";
 import { bus } from "./bus";
 import { icons, fileColor } from "./icons";
+import { showInputBox } from "./palette";
+import { toast } from "./toast";
 
 export class FileTree {
+  private root: HTMLElement;
   private expanded = new Set<string>();
   private rows = new Map<string, HTMLElement>();
   private activePath: string | null = null;
+  private selected: { path: string; type: "file" | "dir" } | null = null;
+  private menu: HTMLElement | null = null;
 
   constructor(private el: HTMLElement, private onOpen: (path: string) => void) {
+    this.el.innerHTML = `
+      <div class="tree-toolbar">
+        <button data-tree-action="new-file" title="New File">${icons.newFile}</button>
+        <button data-tree-action="new-folder" title="New Folder">${icons.newFolder}</button>
+        <button data-tree-action="refresh" title="Refresh">${icons.refresh}</button>
+        <button data-tree-action="open-folder" title="Open Folder">${icons.openFolder}</button>
+      </div>
+      <div class="tree-root" data-tree-root></div>
+    `;
+    this.root = this.el.querySelector<HTMLElement>("[data-tree-root]")!;
+    this.el.querySelector(".tree-toolbar")!.addEventListener("click", (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
+        "[data-tree-action]"
+      );
+      if (button?.dataset.treeAction) this.action(button.dataset.treeAction);
+    });
     bus.on("editor.active", ({ path }: { path: string }) => this.setActive(path));
   }
 
   async refresh(): Promise<void> {
-    this.el.innerHTML = "";
+    this.root.innerHTML = "";
     this.rows.clear();
-    await this.renderInto("", this.el, 0);
+    await this.renderInto("", this.root, 0);
     if (this.activePath) this.setActive(this.activePath);
+  }
+
+  private async action(name: string): Promise<void> {
+    if (name === "refresh") return this.refresh();
+    if (name === "open-folder") return this.openFolder();
+    if (name === "new-file") return this.create("file");
+    if (name === "new-folder") return this.create("dir");
+  }
+
+  private baseDir(): string {
+    if (!this.selected) return "";
+    if (this.selected.type === "dir") return this.selected.path;
+    const slash = this.selected.path.lastIndexOf("/");
+    return slash >= 0 ? this.selected.path.slice(0, slash) : "";
+  }
+
+  private async create(kind: "file" | "dir"): Promise<void> {
+    const name = await showInputBox({
+      prompt: kind === "file" ? "New file name" : "New folder name",
+    });
+    if (!name) return;
+    const base = this.baseDir();
+    const path = base ? `${base}/${name}` : name;
+    try {
+      await bridge.request(kind === "file" ? "fs.createFile" : "fs.mkdir", { path });
+      if (base) this.expanded.add(base);
+      await this.refresh();
+      if (kind === "file") this.onOpen(path);
+    } catch (error: any) {
+      toast("error", `Could not create ${name}: ${error?.message}`);
+    }
+  }
+
+  private async openFolder(): Promise<void> {
+    const root = await showInputBox({ prompt: "Absolute path of the folder to open" });
+    if (!root) return;
+    try {
+      await bridge.request("ws.setRoot", { root });
+      this.expanded.clear();
+      this.selected = null;
+      await this.refresh();
+      toast("info", `Opened ${root}`);
+    } catch (error: any) {
+      toast("error", `Could not open folder: ${error?.message}`);
+    }
+  }
+
+  private async rename(entry: DirEntry): Promise<void> {
+    const name = await showInputBox({ prompt: "New name", value: entry.name });
+    if (!name || name === entry.name) return;
+    const slash = entry.path.lastIndexOf("/");
+    const dir = slash >= 0 ? entry.path.slice(0, slash) : "";
+    const to = dir ? `${dir}/${name}` : name;
+    try {
+      await bridge.request("fs.rename", { from: entry.path, to });
+      bus.emit("file.renamed", { from: entry.path, to });
+      await this.refresh();
+    } catch (error: any) {
+      toast("error", `Rename failed: ${error?.message}`);
+    }
+  }
+
+  private async remove(entry: DirEntry): Promise<void> {
+    if (!window.confirm(`Delete ${entry.path}?`)) return;
+    try {
+      await bridge.request("fs.delete", { path: entry.path });
+      bus.emit("file.deleted", { path: entry.path });
+      await this.refresh();
+    } catch (error: any) {
+      toast("error", `Delete failed: ${error?.message}`);
+    }
+  }
+
+  private openMenu(event: MouseEvent, entry: DirEntry): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.closeMenu();
+    const menu = document.createElement("div");
+    menu.className = "tree-menu";
+    menu.style.left = `${event.clientX}px`;
+    menu.style.top = `${event.clientY}px`;
+
+    const add = (label: string, icon: string, run: () => void) => {
+      const item = document.createElement("div");
+      item.className = "tree-menu-item";
+      item.innerHTML = `${icon}<span>${label}</span>`;
+      item.onclick = (click) => {
+        click.stopPropagation();
+        this.closeMenu();
+        run();
+      };
+      menu.append(item);
+    };
+
+    add("Rename…", icons.rename, () => this.rename(entry));
+    add("Delete", icons.trash, () => this.remove(entry));
+
+    document.body.append(menu);
+    this.menu = menu;
+    const close = () => this.closeMenu();
+    setTimeout(() => document.addEventListener("mousedown", close, { once: true }), 0);
+  }
+
+  private closeMenu(): void {
+    this.menu?.remove();
+    this.menu = null;
   }
 
   private async renderInto(path: string, container: HTMLElement, depth: number): Promise<void> {
@@ -35,7 +162,10 @@ export class FileTree {
         const child = document.createElement("div");
         child.className = "tree-children";
         child.style.display = "none";
-        row.onclick = () => this.toggle(entry, row, child, depth);
+        row.onclick = () => {
+          this.selected = { path: entry.path, type: "dir" };
+          this.toggle(entry, row, child, depth);
+        };
         container.append(row, child);
         if (this.expanded.has(entry.path)) {
           child.style.display = "block";
@@ -44,11 +174,13 @@ export class FileTree {
         }
       } else {
         row.onclick = () => {
+          this.selected = { path: entry.path, type: "file" };
           this.setActive(entry.path);
           this.onOpen(entry.path);
         };
         container.append(row);
       }
+      row.addEventListener("contextmenu", (event) => this.openMenu(event, entry));
     }
   }
 

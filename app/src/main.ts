@@ -266,6 +266,10 @@ bus.on("file.save", () =>
 bus.on("palette.open", () => palette.open());
 bus.on("panel.toggle", () => togglePanel());
 bus.on("sidebar.toggle", () => toggleSidebar());
+bus.on("file.deleted", ({ path }: { path: string }) => editor.close(path));
+bus.on("file.renamed", ({ from, to }: { from: string; to: string }) =>
+  editor.renamePath(from, to)
+);
 
 const toUri = (filePath: string) =>
   filePath.startsWith("file://") ? filePath : `file://${filePath}`;

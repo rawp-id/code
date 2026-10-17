@@ -14,6 +14,20 @@ export const icons = {
     22
   ),
   search: outline(`<circle cx="7.2" cy="7.2" r="4.2"/><path d="M10.4 10.4L14 14"/>`, 22),
+  newFile: outline(
+    `<path d="M4 2.6h4l3 3V9"/><path d="M8 2.6v3h3"/><path d="M11.5 9.4v4.6M9.2 11.7h4.6"/>`
+  ),
+  newFolder: outline(
+    `<path d="M2 3.8h3.5l1.1 1.4h7.4v3.4"/><path d="M2 3.8v8.4h4.6"/><path d="M11.5 9.6v4.4M9.3 11.8h4.4"/>`
+  ),
+  refresh: outline(`<path d="M13 8a5 5 0 1 1-1.5-3.6"/><path d="M13.2 3.2v3h-3"/>`),
+  openFolder: outline(
+    `<path d="M1.9 3.6h3.8l1.2 1.5h7.2v7.3H1.9z"/><path d="M8 11.6V6.6"/><path d="M5.9 8.6L8 6.5l2.1 2.1"/>`
+  ),
+  rename: outline(`<path d="M2.5 13.5l1-3L11 3l2 2-7.5 7.5z"/><path d="M9.8 4.2l2 2"/>`),
+  trash: outline(
+    `<path d="M2.6 4.6h10.8"/><path d="M6.3 4.6V3h3.4v1.6"/><path d="M4.2 4.6l.7 9.4h6.2l.7-9.4"/>`
+  ),
   chevronRight: outline(`<path d="M6 3.5L10.5 8 6 12.5"/>`, 14),
   chevronLeft: outline(`<path d="M10 3.5L5.5 8 10 12.5"/>`, 14),
   chevronDown: outline(`<path d="M3.5 6L8 10.5 12.5 6"/>`, 14),
