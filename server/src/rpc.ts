@@ -214,6 +214,12 @@ export function handleConnection(ws: WebSocket): void {
     "ext.marketplace.detail": ({ registry, id }: any) =>
       getMarketplaceDetail((registry as Registry) || "open-vsx", String(id || "")),
     "ext.detail": ({ id }: { id: string }) => host.detail(id),
+    "ext.themes": () => host.listThemes(),
+    "ext.themeData": ({ extensionId, path: themePath }: any) =>
+      host.readTheme(extensionId, themePath),
+    "ext.iconThemes": () => host.listIconThemes(),
+    "ext.iconThemeData": ({ extensionId, path: themePath }: any) =>
+      host.readIconTheme(extensionId, themePath),
 
     "lsp.didOpen": ({ uri, languageId, text }: any) => lsp.didOpen(uri, languageId, text),
     "lsp.didChange": ({ uri, text }: any) => lsp.didChange(uri, text),

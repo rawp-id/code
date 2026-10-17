@@ -1,5 +1,6 @@
 import type { EditorManager } from "./editor";
-import { icons, fileColor } from "./icons";
+import { icons, fileColor, iconFor } from "./icons";
+import { httpBase } from "./bridge";
 import { showContextMenu, type MenuItem } from "./contextmenu";
 
 export class TabsView {
@@ -35,8 +36,17 @@ export class TabsView {
 
       const icon = document.createElement("span");
       icon.className = "tab-icon";
-      icon.innerHTML = icons.file;
-      icon.style.color = fileColor(doc.path);
+      const fileName = doc.path.split("/").pop() || doc.path;
+      const themed = iconFor(fileName, "file");
+      if (themed) {
+        const img = document.createElement("img");
+        img.src = `${httpBase()}${themed}`;
+        img.alt = "";
+        icon.append(img);
+      } else {
+        icon.innerHTML = icons.file;
+        icon.style.color = fileColor(doc.path);
+      }
 
       const label = document.createElement("span");
       label.className = "tab-label";

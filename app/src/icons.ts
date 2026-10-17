@@ -47,8 +47,38 @@ export const icons = {
 /** Accent colour for a file icon, by extension. */
 let iconTheme: "default" | "minimal" = "default";
 
+export interface ExtensionIconTheme {
+  file?: string;
+  folder?: string;
+  folderExpanded?: string;
+  fileNames: Record<string, string>;
+  fileExtensions: Record<string, string>;
+}
+
+let extensionIconTheme: ExtensionIconTheme | null = null;
+
 export function setIconTheme(name: string): void {
   iconTheme = name === "minimal" ? "minimal" : "default";
+}
+
+export function setExtensionIconTheme(theme: ExtensionIconTheme | null): void {
+  extensionIconTheme = theme;
+}
+
+/** Icon URL from an installed icon theme, or null to use the built-in icon. */
+export function iconFor(name: string, type: "file" | "dir", expanded = false): string | null {
+  if (!extensionIconTheme) return null;
+  if (type === "dir") {
+    const folder = expanded
+      ? extensionIconTheme.folderExpanded || extensionIconTheme.folder
+      : extensionIconTheme.folder;
+    return folder || null;
+  }
+  if (extensionIconTheme.fileNames[name]) return extensionIconTheme.fileNames[name];
+  const dot = name.lastIndexOf(".");
+  const ext = dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
+  if (ext && extensionIconTheme.fileExtensions[ext]) return extensionIconTheme.fileExtensions[ext];
+  return extensionIconTheme.file || null;
 }
 
 export function fileColor(fileName: string): string {

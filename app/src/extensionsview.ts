@@ -1,4 +1,4 @@
-import { bridge, type ExtensionInfo } from "./bridge";
+import { bridge, httpBase, type ExtensionInfo } from "./bridge";
 import { icons } from "./icons";
 import { showQuickPick } from "./palette";
 import { marked } from "marked";
@@ -477,6 +477,9 @@ export class ExtensionsView {
 
   private installedCard(extension: ExtensionInfo): HTMLElement {
     const card = this.card({
+      iconUrl: extension.icon
+        ? `${httpBase()}/ext-asset?ext=${encodeURIComponent(extension.id)}&path=${encodeURIComponent(extension.icon)}`
+        : undefined,
       name: extension.displayName,
       version: extension.version,
       description: extension.runtime ? "Extension with runtime code" : "Declarative extension",

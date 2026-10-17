@@ -13,6 +13,7 @@ export interface ExtensionInfo {
   dir: string;
   active: boolean;
   runtime: boolean;
+  icon?: string;
   commands: { command: string; title: string }[];
 }
 
@@ -204,3 +205,8 @@ export class Bridge {
 }
 
 export const bridge = new Bridge();
+
+/** HTTP origin of the server (for extension assets). */
+export function httpBase(): string {
+  return bridge.serverUrl.replace(/^ws/, "http").replace(/\/ws$/, "");
+}

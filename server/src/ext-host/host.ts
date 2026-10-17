@@ -30,6 +30,7 @@ export interface ExtensionInfo {
   main?: string;
   active: boolean;
   runtime: boolean;
+  icon?: string;
   commands: ExtensionCommand[];
 }
 
@@ -196,6 +197,7 @@ export class ExtensionHost {
           main: manifest.main,
           active: false,
           runtime: Boolean(manifest.main),
+          icon: manifest.icon,
           commands,
           manifest,
         });
@@ -404,6 +406,80 @@ export class ExtensionHost {
     await this.ui.showDocument(uri);
     this.setActiveDocument(uri);
     return this.activeTextEditor();
+  }
+
+  /** Theme and icon-theme contributions from installed extensions. */
+  listThemes(): { id: string; label: string; extensionId: string; path: string }[] {
+    const out: { id: string; label: string; extensionId: string; path: string }[] = [];
+    for (const ext of this.extensions.values()) {
+      for (const theme of ext.manifest?.contributes?.themes || []) {
+        if (!theme?.path) continue;
+        out.push({
+          id: `ext:${ext.id}:${theme.path}`,
+          label: theme.label || theme.path,
+          extensionId: ext.id,
+          path: theme.path,
+        });
+      }
+    }
+    return out;
+  }
+
+  listIconThemes(): { id: string; label: string; extensionId: string; path: string }[] {
+    const out: { id: string; label: string; extensionId: string; path: string }[] = [];
+    for (const ext of this.extensions.values()) {
+      for (const theme of ext.manifest?.contributes?.iconThemes || []) {
+        if (!theme?.path) continue;
+        out.push({
+          id: `ext:${ext.id}:${theme.path}`,
+          label: theme.label || theme.path,
+          extensionId: ext.id,
+          path: theme.path,
+        });
+      }
+    }
+    return out;
+  }
+
+  async readTheme(extensionId: string, themePath: string): Promise<any> {
+    const ext = this.extensions.get(extensionId);
+    if (!ext) throw new Error("Unknown extension");
+    const file = path.resolve(ext.dir, themePath);
+    if (!file.startsWith(ext.dir)) throw new Error("Invalid theme path");
+    return JSON.parse(await fs.readFile(file, "utf8"));
+  }
+
+  async readIconTheme(extensionId: string, themePath: string): Promise<any> {
+    const ext = this.extensions.get(extensionId);
+    if (!ext) throw new Error("Unknown extension");
+    const file = path.resolve(ext.dir, themePath);
+    if (!file.startsWith(ext.dir)) throw new Error("Invalid icon theme path");
+    const theme = JSON.parse(await fs.readFile(file, "utf8"));
+    const baseDir = path.dirname(file);
+    const definitions = theme.iconDefinitions || {};
+    const toUrl = (defId: string | undefined): string | undefined => {
+      const iconPath = defId ? definitions[defId]?.iconPath : undefined;
+      if (!iconPath) return undefined;
+      const absolute = path.resolve(baseDir, iconPath);
+      if (!absolute.startsWith(ext.dir)) return undefined;
+      const relative = path.relative(ext.dir, absolute).split(path.sep).join("/");
+      return `/ext-asset?ext=${encodeURIComponent(ext.id)}&path=${encodeURIComponent(relative)}`;
+    };
+    const mapDefs = (source: Record<string, string>, lower = false) => {
+      const out: Record<string, string> = {};
+      for (const [key, defId] of Object.entries(source || {})) {
+        const url = toUrl(defId);
+        if (url) out[lower ? key.toLowerCase() : key] = url;
+      }
+      return out;
+    };
+    return {
+      file: toUrl(theme.file),
+      folder: toUrl(theme.folder),
+      folderExpanded: toUrl(theme.folderExpanded),
+      fileNames: mapDefs(theme.fileNames || {}),
+      fileExtensions: mapDefs(theme.fileExtensions || {}, true),
+    };
   }
 
   readSettings(): Record<string, any> {

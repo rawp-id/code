@@ -1,6 +1,6 @@
-import { bridge, type DirEntry } from "./bridge";
+import { bridge, type DirEntry, httpBase } from "./bridge";
 import { bus } from "./bus";
-import { icons, fileColor } from "./icons";
+import { icons, fileColor, iconFor } from "./icons";
 import { showInputBox } from "./palette";
 import { pickFolder } from "./folderpicker";
 import { toast } from "./toast";
@@ -191,7 +191,16 @@ export class FileTree {
 
     const icon = document.createElement("span");
     icon.className = `tree-icon ${entry.type}`;
-    if (entry.type === "dir") {
+    const themed =
+      entry.type === "dir"
+        ? iconFor(entry.name, "dir", this.expanded.has(entry.path))
+        : iconFor(entry.name, "file");
+    if (themed) {
+      const img = document.createElement("img");
+      img.src = `${httpBase()}${themed}`;
+      img.alt = "";
+      icon.append(img);
+    } else if (entry.type === "dir") {
       icon.innerHTML = this.expanded.has(entry.path) ? icons.folderOpen : icons.folder;
     } else {
       icon.innerHTML = icons.file;
@@ -236,7 +245,16 @@ export class FileTree {
       chevron.innerHTML = open ? icons.chevronDown : icons.chevronRight;
     }
     if (icon && entry.type === "dir") {
-      icon.innerHTML = open ? icons.folderOpen : icons.folder;
+      const themed = iconFor(entry.name, "dir", open);
+      if (themed) {
+        icon.innerHTML = "";
+        const img = document.createElement("img");
+        img.src = `${httpBase()}${themed}`;
+        img.alt = "";
+        icon.append(img);
+      } else {
+        icon.innerHTML = open ? icons.folderOpen : icons.folder;
+      }
     }
   }
 

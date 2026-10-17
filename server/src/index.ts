@@ -1,16 +1,35 @@
 import { createServer } from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { handleConnection } from "./rpc.js";
+import { serveExtensionAsset } from "./ext-assets.js";
 
 const PORT = Number(process.env.PORT || 3177);
 const HOST = process.env.HOST || "0.0.0.0";
 
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const EXTENSIONS_DIR = path.join(path.resolve(HERE, ".."), "extensions");
+
 const http = createServer((req, res) => {
-  if (req.url === "/health") {
+  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+
+  if (url.pathname === "/health") {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end("ok");
     return;
   }
+
+  if (url.pathname === "/ext-asset") {
+    void serveExtensionAsset(
+      EXTENSIONS_DIR,
+      url.searchParams.get("ext") || "",
+      url.searchParams.get("path") || "",
+      res
+    );
+    return;
+  }
+
   res.writeHead(404);
   res.end();
 });

@@ -32,15 +32,31 @@ export const SHIKI_THEMES: Record<string, { label: string; theme: any }> = {
 const DEFAULT_THEME = "dark-plus";
 let currentTheme = DEFAULT_THEME;
 
+const themeRegistry = new Map<string, any>(
+  Object.entries(SHIKI_THEMES).map(([name, entry]) => [name, entry.theme])
+);
+
+/** Register a theme at runtime (e.g. from an installed VS Code theme). */
+export function registerShikiTheme(name: string, theme: any): void {
+  themeRegistry.set(name, theme);
+  if (corePromise) {
+    corePromise.then((core) => core.loadTheme(theme)).catch(() => undefined);
+  }
+}
+
+function getTheme(name: string): any {
+  return themeRegistry.get(name) || themeRegistry.get(DEFAULT_THEME);
+}
+
 export const refreshHighlighting = StateEffect.define<null>();
 
 export function setShikiTheme(name: string): string {
-  currentTheme = SHIKI_THEMES[name] ? name : DEFAULT_THEME;
+  currentTheme = themeRegistry.has(name) ? name : DEFAULT_THEME;
   return currentTheme;
 }
 
 function themeColors(name: string): { fg: string; bg: string } {
-  const theme = (SHIKI_THEMES[name] || SHIKI_THEMES[DEFAULT_THEME]).theme;
+  const theme = getTheme(name);
   const colors = theme.colors ?? {};
   return {
     fg: theme.fg || colors["editor.foreground"] || "#d4d4d4",
@@ -117,7 +133,7 @@ const loaded = new Set<string>();
 function getCore(): Promise<HighlighterCore> {
   if (!corePromise) {
     corePromise = createHighlighterCore({
-      themes: Object.values(SHIKI_THEMES).map((entry) => entry.theme),
+      themes: [...themeRegistry.values()],
       langs: [],
       engine: createOnigurumaEngine(wasm),
     });

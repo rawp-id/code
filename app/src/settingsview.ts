@@ -1,7 +1,7 @@
 import { bridge } from "./bridge";
 import { DEFAULT_SETTINGS, getPath, setPath, type Settings } from "./settings";
-import { SHIKI_THEMES } from "./highlight";
-import { icons } from "./icons";
+import { SHIKI_THEMES, registerShikiTheme } from "./highlight";
+import { icons, setExtensionIconTheme } from "./icons";
 
 interface SettingDef {
   id: string;
@@ -161,6 +161,9 @@ export class SettingsView {
   private bodyEl: HTMLElement;
   private settings: Settings = structuredClone(DEFAULT_SETTINGS);
   private lspConfig: Record<string, { command: string; args?: string[] }> = {};
+  private extensionThemes: { id: string; label: string; extensionId: string; path: string }[] = [];
+  private extensionIconThemes: { id: string; label: string; extensionId: string; path: string }[] =
+    [];
   private mode: "list" | "detail" = "list";
   private selectedId: string | null = null;
   private timer: number | undefined;
@@ -199,14 +202,85 @@ export class SettingsView {
       /* keep defaults */
     }
     try {
+      this.extensionThemes = await bridge.request("ext.themes");
+    } catch {
+      this.extensionThemes = [];
+    }
+    try {
+      this.extensionIconThemes = await bridge.request("ext.iconThemes");
+    } catch {
+      this.extensionIconThemes = [];
+    }
+    try {
       this.lspConfig = await bridge.request("lsp.config");
     } catch {
       this.lspConfig = {};
     }
+    await this.ensureThemeData();
+    await this.ensureIconThemeData();
     this.mode = "list";
     this.selectedId = null;
     this.render();
     this.onChange?.(this.settings);
+  }
+
+  private optionsFor(def: SettingDef): { label: string; value: string }[] {
+    if (def.id === "editor.colorTheme") {
+      return [
+        ...COLOR_THEMES,
+        ...this.extensionThemes.map((theme) => ({ value: theme.id, label: theme.label })),
+      ];
+    }
+    if (def.id === "workbench.iconTheme") {
+      return [
+        ...ICON_THEMES,
+        ...this.extensionIconThemes.map((theme) => ({ value: theme.id, label: theme.label })),
+      ];
+    }
+    return def.options || [];
+  }
+
+  private async loadTheme(value: string): Promise<void> {
+    if (!value.startsWith("ext:")) return;
+    const theme = this.extensionThemes.find((item) => item.id === value);
+    if (!theme) return;
+    try {
+      const data = await bridge.request("ext.themeData", {
+        extensionId: theme.extensionId,
+        path: theme.path,
+      });
+      registerShikiTheme(value, data);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private async loadIconTheme(value: string): Promise<void> {
+    if (!value.startsWith("ext:")) {
+      setExtensionIconTheme(null);
+      return;
+    }
+    const theme = this.extensionIconThemes.find((item) => item.id === value);
+    if (!theme) return;
+    try {
+      const data = await bridge.request("ext.iconThemeData", {
+        extensionId: theme.extensionId,
+        path: theme.path,
+      });
+      setExtensionIconTheme(data);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private async ensureThemeData(): Promise<void> {
+    const value = getPath(this.settings, "editor.colorTheme");
+    if (typeof value === "string") await this.loadTheme(value);
+  }
+
+  private async ensureIconThemeData(): Promise<void> {
+    const value = getPath(this.settings, "workbench.iconTheme");
+    if (typeof value === "string") await this.loadIconTheme(value);
   }
 
   private render(): void {
@@ -391,7 +465,7 @@ export class SettingsView {
     const value = getPath(this.settings, def.id, getPath(DEFAULT_SETTINGS, def.id));
     if (def.type === "boolean") return value ? "On" : "Off";
     if (def.type === "select") {
-      return def.options?.find((option) => option.value === value)?.label ?? String(value ?? "");
+      return this.optionsFor(def).find((option) => option.value === value)?.label ?? String(value ?? "");
     }
     if (def.type === "stringArray") {
       const list = Array.isArray(value) ? value : [];
@@ -431,14 +505,19 @@ export class SettingsView {
 
     if (def.type === "select") {
       const select = document.createElement("select");
-      for (const option of def.options || []) {
+      for (const option of this.optionsFor(def)) {
         const element = document.createElement("option");
         element.value = option.value;
         element.textContent = option.label;
         if (option.value === value) element.selected = true;
         select.append(element);
       }
-      select.onchange = () => this.update(def.id, select.value);
+      select.onchange = async () => {
+        const next = select.value;
+        if (def.id === "editor.colorTheme") await this.loadTheme(next);
+        if (def.id === "workbench.iconTheme") await this.loadIconTheme(next);
+        this.update(def.id, next);
+      };
       return select;
     }
 
