@@ -15,6 +15,7 @@ import { initConnectionUi, openConnectionDialog } from "./connect";
 import { isNativePlatform, KodeServer } from "./native";
 import { TerminalPanel } from "./terminal";
 import { toast } from "./toast";
+import { disableInputAssistance } from "./inputs";
 import { loadSession, saveSession } from "./session";
 
 const root = document.getElementById("root");
@@ -524,6 +525,7 @@ async function init(): Promise<void> {
 }
 
 bridge.connect();
+disableInputAssistance();
 initConnectionUi();
 setSidebarView("files");
 init();
