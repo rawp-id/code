@@ -517,16 +517,16 @@ bridge.handleRequest("ui.showInputBox", (params) => showInputBox(params.options)
 async function init(): Promise<void> {
   let info: ServerInfo | null = null;
   try {
-    info = await bridge.request<ServerInfo>("server.info");
+    info = await bridge.request<ServerInfo>("server.info", undefined, 1000);
     workspaceRoot = info.workspace.root;
-  } catch (error: any) {
-    toast("error", `Server unavailable: ${error?.message}`);
+  } catch {
+    workspaceRoot = "Local Workspace";
   }
 
   await settingsView.refresh();
 
   const session = loadSession();
-  const sameWorkspace = Boolean(session && info && session.workspaceRoot === info.workspace.root);
+  const sameWorkspace = Boolean(session && (!info || session.workspaceRoot === info.workspace.root));
 
   if (session && sameWorkspace) {
     await filetree.setExpanded(session.expanded || []);

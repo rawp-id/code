@@ -26,6 +26,8 @@ export interface ServerInfo {
   platform: string;
 }
 
+import { localVfs } from "./localvfs";
+
 type Pending = {
   resolve: (value: any) => void;
   reject: (error: Error) => void;
@@ -93,12 +95,28 @@ export class Bridge {
   }
 
   request<T = any>(method: string, params?: any, timeoutMs = 60000): Promise<T> {
+    if (!this.connected && localVfs.canHandle(method)) {
+      try {
+        const result = localVfs.handle(method, params);
+        return Promise.resolve(result as T);
+      } catch (err: any) {
+        return Promise.reject(err);
+      }
+    }
+
     const id = this.seq++;
     const message = JSON.stringify({ id, method, params });
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      if (this.connected && this.ws) this.ws.send(message);
-      else this.queue.push(message);
+      if (this.connected && this.ws) {
+        this.ws.send(message);
+      } else {
+        // If disconnected and not handled by localVfs, fail quickly instead of freezing
+        const actualTimeout = Math.min(timeoutMs, 3000);
+        setTimeout(() => {
+          if (this.pending.delete(id)) reject(new Error(`Server offline: ${method}`));
+        }, actualTimeout);
+      }
       setTimeout(() => {
         if (this.pending.delete(id)) reject(new Error(`Request timed out: ${method}`));
       }, timeoutMs);
