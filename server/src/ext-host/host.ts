@@ -29,6 +29,7 @@ export interface ExtensionInfo {
   dir: string;
   main?: string;
   active: boolean;
+  runtime: boolean;
   commands: ExtensionCommand[];
 }
 
@@ -194,6 +195,7 @@ export class ExtensionHost {
           dir: extDir,
           main: manifest.main,
           active: false,
+          runtime: Boolean(manifest.main),
           commands,
           manifest,
         });

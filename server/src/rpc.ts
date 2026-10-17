@@ -5,6 +5,7 @@ import { Workspace } from "./workspace.js";
 import { PtyManager } from "./pty.js";
 import { ExtensionHost, type UiBridge } from "./ext-host/host.js";
 import { installVsix, uninstallExtension } from "./ext-host/installer.js";
+import { searchMarketplace, type Registry } from "./ext-host/marketplace.js";
 import { LspManager } from "./lsp/manager.js";
 import { searchWorkspace } from "./search.js";
 
@@ -183,6 +184,15 @@ export function handleConnection(ws: WebSocket): void {
       host.markUnscanned();
       await host.scan();
       return removed;
+    },
+    "ext.marketplace.search": ({ registry, query, size, offset }: any) =>
+      searchMarketplace((registry as Registry) || "open-vsx", String(query || ""), size || 30, offset || 0),
+    "ext.marketplace.install": async ({ downloadUrl }: { downloadUrl: string }) => {
+      if (!downloadUrl) throw new Error("Missing download url");
+      const info = await installVsix(EXTENSIONS_DIR, { url: downloadUrl });
+      host.markUnscanned();
+      await host.scan();
+      return info;
     },
 
     "lsp.didOpen": ({ uri, languageId, text }: any) => lsp.didOpen(uri, languageId, text),

@@ -1,4 +1,4 @@
-import { bridge, type DirEntry, type ExtensionInfo } from "./bridge";
+import { bridge, type DirEntry } from "./bridge";
 import { bus } from "./bus";
 import { icons, fileColor } from "./icons";
 
@@ -119,53 +119,6 @@ export class FileTree {
     this.activePath = path;
     for (const [rowPath, row] of this.rows) {
       row.classList.toggle("active", rowPath === path);
-    }
-  }
-}
-
-export class ExtensionsView {
-  constructor(
-    private el: HTMLElement,
-    private onRunCommand: (extensionId: string, command: string) => void
-  ) {}
-
-  async refresh(): Promise<void> {
-    let extensions: ExtensionInfo[] = [];
-    try {
-      extensions = await bridge.request<ExtensionInfo[]>("ext.list");
-    } catch (error: any) {
-      this.el.textContent = `Failed to load extensions: ${error?.message}`;
-      return;
-    }
-    if (extensions.length === 0) {
-      this.el.textContent = "No extensions found in server/extensions.";
-      return;
-    }
-
-    this.el.innerHTML = "";
-    for (const extension of extensions) {
-      const item = document.createElement("div");
-      item.className = "ext-item";
-
-      const name = document.createElement("div");
-      name.className = "name";
-      name.textContent = extension.displayName;
-
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      meta.textContent = `${extension.id} · v${extension.version}${extension.active ? " · active" : ""}`;
-
-      item.append(name, meta);
-
-      for (const command of extension.commands) {
-        const link = document.createElement("span");
-        link.className = "cmd";
-        link.textContent = command.title;
-        link.onclick = () => this.onRunCommand(extension.id, command.command);
-        item.append(link);
-      }
-
-      this.el.append(item);
     }
   }
 }

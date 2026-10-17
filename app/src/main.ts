@@ -4,7 +4,8 @@ import { bus } from "./bus";
 import { createLayout } from "./layout";
 import { EditorManager } from "./editor";
 import { TabsView } from "./tabs";
-import { FileTree, ExtensionsView } from "./sidebar";
+import { FileTree } from "./sidebar";
+import { ExtensionsView } from "./extensionsview";
 import { SearchView } from "./searchview";
 import { CommandPalette, showInputBox, showQuickPick, type Command } from "./palette";
 import { initConnectionUi, openConnectionDialog } from "./connect";
@@ -30,8 +31,10 @@ const filetree = new FileTree(filesEl, (path) => {
   editor.open(path).catch((error: any) => toast("error", `Could not open ${path}: ${error?.message}`));
 });
 
-const extensionsView = new ExtensionsView(extensionsEl, (extensionId, command) =>
-  runExtensionCommand(extensionId, command)
+const extensionsView = new ExtensionsView(
+  extensionsEl,
+  (extensionId, command) => runExtensionCommand(extensionId, command),
+  () => updateExtensionCommands()
 );
 
 const palette = new CommandPalette();
@@ -91,8 +94,7 @@ function togglePanel(show?: boolean): void {
   }
 }
 
-async function refreshExtensions(): Promise<void> {
-  await extensionsView.refresh();
+async function updateExtensionCommands(): Promise<void> {
   let extensions: ExtensionInfo[] = [];
   try {
     extensions = await bridge.request<ExtensionInfo[]>("ext.list");
@@ -111,6 +113,11 @@ async function refreshExtensions(): Promise<void> {
     }
   }
   palette.setCommands([...builtinCommands, ...extensionCommands]);
+}
+
+async function refreshExtensions(): Promise<void> {
+  await extensionsView.refresh();
+  await updateExtensionCommands();
 }
 
 async function runExtensionCommand(extensionId: string, command: string): Promise<void> {

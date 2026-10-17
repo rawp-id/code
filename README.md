@@ -83,13 +83,21 @@ shim; `require('fs')`, `require('path')`, and other Node builtins work normally.
 
 ### Installing extensions
 
-Use **Extensions: Install from VSIX…** from the command palette and give a local
-`.vsix` path or a URL. **Extensions: Uninstall…** removes one. Only CommonJS
-extensions that stay inside the implemented API surface will run; extensions
-relying on unimplemented APIs load but may throw when those APIs are used.
+The **Extensions** view works like VS Code: the search box filters installed
+extensions when empty and searches the marketplace when you type. Pick a
+registry with the dropdown — **Open VSX** or the **VS Code Marketplace** — then
+press **Install**. Installed entries show a `Run command` button and
+`Uninstall`.
+
+You can also use **Extensions: Install from VSIX…** from the command palette
+with a local `.vsix` path or a URL.
 
 > Extensions execute with full Node privileges in the server process. Only
 > install extensions you trust.
+>
+> A successful install does not guarantee an extension works: most marketplace
+extensions are runtime code and only use part of the `vscode` API surface this
+> shim implements. Themes and grammars are downloaded but not applied yet.
 
 ## Terminal
 

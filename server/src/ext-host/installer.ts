@@ -1,6 +1,7 @@
 import AdmZip from "adm-zip";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { gunzipSync } from "node:zlib";
 
 export interface InstalledExtension {
   id: string;
@@ -16,9 +17,13 @@ const PREFIX = "extension/";
 /** Install a `.vsix` (from a local path or URL) into the extensions directory. */
 export async function installVsix(
   extensionsDir: string,
-  source: { path?: string; url?: string }
+  source: { path?: string; url?: string; data?: Buffer }
 ): Promise<InstalledExtension> {
-  const buffer = await readSource(source);
+  let buffer = await readSource(source);
+  // The VS Code Marketplace serves gzipped packages; Open VSX serves plain VSIX.
+  if (buffer.length > 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) {
+    buffer = gunzipSync(buffer);
+  }
   const zip = new AdmZip(buffer);
 
   const manifestEntry = zip.getEntry(`${PREFIX}package.json`);
@@ -67,14 +72,15 @@ export async function uninstallExtension(extensionsDir: string, id: string): Pro
   return false;
 }
 
-async function readSource(source: { path?: string; url?: string }): Promise<Buffer> {
+async function readSource(source: { path?: string; url?: string; data?: Buffer }): Promise<Buffer> {
+  if (source.data) return source.data;
   if (source.url) {
     const response = await fetch(source.url);
     if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText}`);
     return Buffer.from(await response.arrayBuffer());
   }
   if (source.path) return fs.readFile(source.path);
-  throw new Error("Provide a VSIX path or url");
+  throw new Error("Provide a VSIX path, url or data");
 }
 
 async function removeExisting(extensionsDir: string, publisher: string, name: string): Promise<void> {

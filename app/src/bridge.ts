@@ -12,6 +12,7 @@ export interface ExtensionInfo {
   version: string;
   dir: string;
   active: boolean;
+  runtime: boolean;
   commands: { command: string; title: string }[];
 }
 
