@@ -39,9 +39,12 @@ const themeRegistry = new Map<string, any>(
 
 /** Register a theme at runtime (e.g. from an installed VS Code theme). */
 export function registerShikiTheme(name: string, theme: any): void {
-  themeRegistry.set(name, theme);
+  // Give the theme a unique name: extension themes often all share the same
+  // internal name (e.g. "Mayukai"), which makes Shiki resolve the wrong one.
+  const registration = { ...theme, name };
+  themeRegistry.set(name, registration);
   if (corePromise) {
-    corePromise.then((core) => core.loadTheme(theme)).catch(() => undefined);
+    corePromise.then((core) => core.loadTheme(registration)).catch(() => undefined);
   }
 }
 
@@ -263,7 +266,7 @@ class ShikiRunner {
       if (!(await ensureLanguage(this.lang))) return;
       const core = await getCore();
       if (this.destroyed) return;
-      const result = core.codeToTokens(text, { lang: this.lang, theme: currentTheme });
+      const result = core.codeToTokens(text, { lang: this.lang, theme: getTheme(currentTheme) });
       if (this.destroyed) return;
       this.decorations = buildDecorations(this.view, result.tokens);
       this.onUpdate(this.decorations);
