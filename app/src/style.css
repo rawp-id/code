@@ -1029,11 +1029,16 @@ body {
 }
 
 .search-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
   padding: 12px 8px 0;
 }
 
 .search-inputs input[type="text"] {
-  width: 100%;
+  flex: 1 1 120px;
+  min-width: 0;
   background: #3c3c3c;
   border: 1px solid transparent;
   border-radius: 3px;
@@ -1049,16 +1054,18 @@ body {
 
 .search-flags {
   display: flex;
-  gap: 12px;
-  padding: 8px 2px;
-  color: var(--fg-dim);
-  font-size: 12px;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 0;
 }
 
 .search-flags label {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--fg-dim);
   cursor: pointer;
   user-select: none;
 }
