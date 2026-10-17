@@ -69,28 +69,13 @@ export function initConnectionUi(): void {
 
   bridge.on("status", ({ connected, url }: { connected: boolean; url: string }) => {
     if (connected) {
-      window.clearTimeout(hideTimer);
-      hideTimer = undefined;
       overlay.style.display = "none";
-      statusEl.textContent = "";
+      statusEl.textContent = "Connected";
       return;
     }
     input.value = url || input.value;
-    statusEl.textContent = "Standalone Mode. Server address: " + (url || input.value);
-
-    // If user explicitly chose to work offline or dismissed, do not auto-popup
-    if (userDismissed) return;
-
-    if (hideTimer === undefined) {
-      hideTimer = window.setTimeout(() => {
-        hideTimer = undefined;
-        if (!userDismissed) {
-          overlay.style.display = "flex";
-          input.focus();
-          input.select();
-        }
-      }, 2500);
-    }
+    statusEl.textContent = "Standalone Mode (Offline)";
+    // Do NOT auto popup - user configures in settings or command palette
   });
 }
 

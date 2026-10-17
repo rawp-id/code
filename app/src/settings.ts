@@ -13,6 +13,7 @@ export interface Settings {
   search: { exclude: string[]; maxResults: number };
   terminal: { fontSize: number; prompt: string };
   workbench: { sidebarWidth: number; iconTheme: "default" | "minimal" };
+  connection?: { serverUrl: string };
   [key: string]: any;
 }
 
@@ -31,6 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   search: { exclude: [], maxResults: 1000 },
   terminal: { fontSize: 13, prompt: "\\u@\\h \\w \\$ " },
   workbench: { sidebarWidth: 240, iconTheme: "default" },
+  connection: { serverUrl: "ws://localhost:3177/ws" },
 };
 
 export function getPath(object: any, dotted: string, fallback?: any): any {

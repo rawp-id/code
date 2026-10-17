@@ -153,9 +153,17 @@ const SCHEMA: SettingDef[] = [
     max: 500,
     step: 10,
   },
+  {
+    id: "connection.serverUrl",
+    section: "Connection",
+    label: "Server WebSocket URL",
+    description: "Backend server WebSocket address (e.g. ws://localhost:3177/ws). Leave empty for offline standalone mode.",
+    type: "string",
+    placeholder: "ws://localhost:3177/ws",
+  },
 ];
 
-const SECTIONS = ["Themes", "Editor", "Files", "Search", "Terminal", "Workbench"];
+const SECTIONS = ["Connection", "Themes", "Editor", "Files", "Search", "Terminal", "Workbench"];
 
 export class SettingsView {
   private searchEl: HTMLInputElement;
@@ -190,6 +198,10 @@ export class SettingsView {
       }
       this.render();
     });
+
+    bridge.on("status", () => {
+      this.render();
+    });
   }
 
   focus(): void {
@@ -201,6 +213,9 @@ export class SettingsView {
       this.settings = await bridge.request<Settings>("settings.get");
     } catch {
       /* keep defaults */
+    }
+    if (!this.settings.connection) {
+      this.settings.connection = { serverUrl: bridge.serverUrl };
     }
     try {
       this.extensionThemes = await bridge.request("ext.themes");
@@ -412,6 +427,23 @@ export class SettingsView {
     description.textContent = def.description || def.id;
     header.append(title, description);
 
+    if (def.id === "connection.serverUrl") {
+      const statusBox = document.createElement("div");
+      statusBox.className = "settings-detail-desc";
+      statusBox.style.marginTop = "8px";
+      statusBox.style.padding = "8px 12px";
+      statusBox.style.borderRadius = "4px";
+      statusBox.style.background = bridge.connected
+        ? "rgba(46, 160, 67, 0.15)"
+        : "rgba(255, 165, 0, 0.15)";
+      statusBox.innerHTML = `<strong>Status:</strong> ${
+        bridge.connected
+          ? `Connected to ${bridge.serverUrl}`
+          : "Standalone Mode (Offline — no backend server connected)"
+      }`;
+      header.append(statusBox);
+    }
+
     const field = document.createElement("div");
     field.className = "settings-detail-field";
     const fieldLabel = document.createElement("div");
@@ -424,6 +456,32 @@ export class SettingsView {
 
     const actions = document.createElement("div");
     actions.className = "settings-detail-actions";
+
+    if (def.id === "connection.serverUrl") {
+      const connect = document.createElement("button");
+      connect.className = "ext-btn primary";
+      connect.textContent = bridge.connected ? "Reconnect" : "Connect";
+      connect.onclick = () => {
+        const url = String(getPath(this.settings, def.id, "") || "").trim();
+        if (url) {
+          bridge.setUrl(url);
+          this.render();
+        }
+      };
+      actions.append(connect);
+
+      if (bridge.connected) {
+        const disconnect = document.createElement("button");
+        disconnect.className = "ext-btn";
+        disconnect.textContent = "Disconnect (Work Offline)";
+        disconnect.onclick = () => {
+          bridge.setUrl("");
+          this.render();
+        };
+        actions.append(disconnect);
+      }
+    }
+
     const reset = document.createElement("button");
     reset.className = "ext-btn";
     reset.textContent = "Reset to default";
@@ -486,6 +544,9 @@ export class SettingsView {
 
   private formatValue(def: SettingDef): string {
     const value = getPath(this.settings, def.id, getPath(DEFAULT_SETTINGS, def.id));
+    if (def.id === "connection.serverUrl") {
+      return bridge.connected ? `Connected (${value})` : `Offline (${value || "None"})`;
+    }
     if (def.type === "boolean") return value ? "On" : "Off";
     if (def.type === "select") {
       return this.optionsFor(def).find((option) => option.value === value)?.label ?? String(value ?? "");
@@ -573,6 +634,9 @@ export class SettingsView {
 
   private update(id: string, value: any): void {
     setPath(this.settings, id, value);
+    if (id === "connection.serverUrl" && typeof value === "string") {
+      bridge.serverUrl = value;
+    }
     this.onChange?.(this.settings);
     this.save();
   }

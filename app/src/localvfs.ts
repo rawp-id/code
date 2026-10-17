@@ -265,6 +265,7 @@ export class LocalVfs {
           search: { exclude: [] },
           terminal: { fontSize: 13 },
           workbench: { sidebarWidth: 240, iconTheme: "default" },
+          connection: { serverUrl: "ws://localhost:3177/ws" },
         };
       }
 
@@ -296,7 +297,7 @@ export class LocalVfs {
         return clientExtensions.detail(params?.id);
 
       case "ext.marketplace.install":
-        return clientExtensions.installVsix(params?.downloadUrl);
+        return clientExtensions.installVsix(params?.downloadUrl, params?.iconUrl);
 
       case "ext.enable":
         clientExtensions.enable(params?.id);

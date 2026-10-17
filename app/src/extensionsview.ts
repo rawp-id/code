@@ -49,6 +49,15 @@ function renderMarkdown(text?: string, isHtml?: boolean): string {
   return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
 }
 
+function resolveIconUrl(extensionId: string, icon?: string): string | undefined {
+  if (!icon) return undefined;
+  if (icon.startsWith("data:") || icon.startsWith("http://") || icon.startsWith("https://")) {
+    return icon;
+  }
+  return `${httpBase()}/ext-asset?ext=${encodeURIComponent(extensionId)}&path=${encodeURIComponent(icon)}`;
+}
+
+
 export class ExtensionsView {
   private searchEl: HTMLInputElement;
   private tabsEl: HTMLElement;
@@ -160,7 +169,8 @@ export class ExtensionsView {
 
   private async performInstall(
     downloadUrl: string | undefined,
-    button: HTMLButtonElement
+    button: HTMLButtonElement,
+    iconUrl?: string
   ): Promise<void> {
     if (!downloadUrl) {
       button.textContent = "No download";
@@ -177,7 +187,7 @@ export class ExtensionsView {
     button.disabled = true;
     button.textContent = "Downloading…";
     try {
-      await bridge.request("ext.marketplace.install", { downloadUrl }, 15 * 60 * 1000);
+      await bridge.request("ext.marketplace.install", { downloadUrl, iconUrl }, 15 * 60 * 1000);
       button.textContent = "Installed";
       await this.refresh();
       this.onChanged?.();
@@ -387,9 +397,7 @@ export class ExtensionsView {
           });
       this.detail = { data: detail, installed };
       if (installed && !detail.iconUrl && (detail as any).icon) {
-        detail.iconUrl = `${httpBase()}/ext-asset?ext=${encodeURIComponent(
-          detail.id
-        )}&path=${encodeURIComponent((detail as any).icon)}`;
+        detail.iconUrl = resolveIconUrl(detail.id, (detail as any).icon);
       }
       this.render();
     } catch (error: any) {
@@ -526,7 +534,7 @@ export class ExtensionsView {
     install.textContent = "Install";
     install.onclick = (event) => {
       event.stopPropagation();
-      void this.performInstall(detail.downloadUrl, install);
+      void this.performInstall(detail.downloadUrl, install, detail.iconUrl);
     };
     actions.append(install);
   }
@@ -535,9 +543,7 @@ export class ExtensionsView {
 
   private installedCard(extension: ExtensionInfo): HTMLElement {
     const card = this.card({
-      iconUrl: extension.icon
-        ? `${httpBase()}/ext-asset?ext=${encodeURIComponent(extension.id)}&path=${encodeURIComponent(extension.icon)}`
-        : undefined,
+      iconUrl: resolveIconUrl(extension.id, extension.icon),
       name: extension.displayName,
       version: extension.version,
       description: extension.runtime
@@ -620,7 +626,7 @@ export class ExtensionsView {
     install.textContent = "Install";
     install.onclick = (event) => {
       event.stopPropagation();
-      void this.performInstall(extension.downloadUrl, install);
+      void this.performInstall(extension.downloadUrl, install, extension.iconUrl);
     };
     actions.append(install);
     return card;

@@ -37,29 +37,95 @@ interface StoredExtension {
   publisher: string;
   version: string;
   icon?: string;
-  iconDataUrl?: string;
+  iconUrl?: string;
   manifest: any;
-  files: Record<string, string>; // relative path -> text content (e.g. JSON themes)
+  files: Record<string, string>;
   disabled?: boolean;
 }
 
-const STORAGE_KEY = "kode.client_installed_extensions";
+const DB_NAME = "kode-extensions-db";
+const STORE_NAME = "extensions";
+const LS_FALLBACK_KEY = "kode.client_extensions_summary";
+
+function openDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("IndexedDB not available"));
+      return;
+    }
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbGetAll(): Promise<StoredExtension[]> {
+  try {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const req = tx.objectStore(STORE_NAME).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function idbSet(item: StoredExtension): Promise<void> {
+  try {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      const req = tx.objectStore(STORE_NAME).put(item);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    /* fallback to in-memory */
+  }
+}
+
+async function idbDelete(id: string): Promise<void> {
+  try {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      const req = tx.objectStore(STORE_NAME).delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    /* ignore */
+  }
+}
 
 class ClientExtensionService {
   private extensions = new Map<string, StoredExtension>();
+  private initialized = false;
 
   constructor() {
-    this.load();
+    this.loadFallback();
+    void this.initIndexedDb();
   }
 
-  private load(): void {
+  private loadFallback(): void {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(LS_FALLBACK_KEY);
       if (!raw) return;
-      const parsed: StoredExtension[] = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        for (const ext of parsed) {
-          if (ext && ext.id) this.extensions.set(ext.id, ext);
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        for (const item of list) {
+          if (item?.id && !this.extensions.has(item.id)) {
+            this.extensions.set(item.id, item);
+          }
         }
       }
     } catch {
@@ -67,24 +133,35 @@ class ClientExtensionService {
     }
   }
 
-  private save(): void {
+  private saveFallback(): void {
     try {
-      const list = [...this.extensions.values()];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      // Save lightweight summary to localStorage (without heavy files)
+      const list = [...this.extensions.values()].map((e) => ({
+        id: e.id,
+        name: e.name,
+        displayName: e.displayName,
+        publisher: e.publisher,
+        version: e.version,
+        icon: e.icon,
+        iconUrl: e.iconUrl,
+        manifest: e.manifest,
+        disabled: e.disabled,
+        files: Object.fromEntries(
+          Object.entries(e.files || {}).filter(([k]) => k.endsWith(".json"))
+        ),
+      }));
+      localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(list));
     } catch {
-      // If localStorage is full, remove large readmes from stored manifests and retry
-      try {
-        const compact = [...this.extensions.values()].map((e) => ({
-          ...e,
-          files: Object.fromEntries(
-            Object.entries(e.files).filter(([k]) => k.endsWith(".json") || k.endsWith(".svg"))
-          ),
-        }));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(compact));
-      } catch {
-        /* storage full */
-      }
+      /* ignore */
     }
+  }
+
+  private async initIndexedDb(): Promise<void> {
+    const items = await idbGetAll();
+    for (const item of items) {
+      if (item?.id) this.extensions.set(item.id, item);
+    }
+    this.initialized = true;
   }
 
   async searchMarketplace(
@@ -161,6 +238,7 @@ class ClientExtensionService {
 
   async installVsix(
     downloadUrl: string,
+    iconUrl?: string,
     onProgress?: (received: number, total: number, done: boolean) => void
   ): Promise<ExtensionInfo> {
     onProgress?.(0, 100, false);
@@ -168,13 +246,15 @@ class ClientExtensionService {
     if (!res.ok) throw new Error(`Download failed with HTTP ${res.status}`);
 
     const buffer = await res.arrayBuffer();
-    onProgress?.(50, 100, false);
+    onProgress?.(40, 100, false);
 
     const unzipped = unzipSync(new Uint8Array(buffer));
-    onProgress?.(80, 100, false);
+    onProgress?.(70, 100, false);
 
     // Look for extension/package.json
-    const manifestKey = Object.keys(unzipped).find((k) => k === "extension/package.json" || k.endsWith("/package.json"));
+    const manifestKey = Object.keys(unzipped).find(
+      (k) => k === "extension/package.json" || k.endsWith("/package.json")
+    );
     if (!manifestKey) throw new Error("Invalid VSIX: package.json missing");
 
     const manifest = JSON.parse(strFromU8(unzipped[manifestKey]));
@@ -182,27 +262,56 @@ class ClientExtensionService {
     const name = manifest.name;
     const id = `${publisher}.${name}`;
 
-    // Extract files (themes, icons, configs)
+    // Collect targeted file paths (avoid unpacking thousands of unneeded files)
+    const needed = new Set<string>();
+    for (const theme of manifest.contributes?.themes || []) {
+      if (theme.path) needed.add(theme.path.replace(/^\.?\//, ""));
+    }
+    for (const it of manifest.contributes?.iconThemes || []) {
+      if (it.path) needed.add(it.path.replace(/^\.?\//, ""));
+    }
+    for (const snip of manifest.contributes?.snippets || []) {
+      if (snip.path) needed.add(snip.path.replace(/^\.?\//, ""));
+    }
+    if (manifest.icon) needed.add(manifest.icon.replace(/^\.?\//, ""));
+
+    // Extract relevant files (themes, icons, configs, readmes)
     const files: Record<string, string> = {};
-    let iconDataUrl: string | undefined;
+    let iconDataUrl = iconUrl;
 
     for (const [key, rawBytes] of Object.entries(unzipped)) {
       const rel = key.replace(/^extension\//, "");
-      if (rel.endsWith(".json") || rel.endsWith(".svg") || rel.endsWith(".md") || rel.endsWith(".txt")) {
+      const isNeeded =
+        needed.has(rel) ||
+        rel.toLowerCase() === "readme.md" ||
+        rel.toLowerCase() === "changelog.md" ||
+        (manifest.contributes?.iconThemes && (rel.endsWith(".json") || rel.endsWith(".svg")));
+
+      if (isNeeded) {
         try {
           files[rel] = strFromU8(rawBytes);
         } catch {
           /* ignore non-utf8 */
         }
       }
-      // Check for icon
-      if (manifest.icon && (rel === manifest.icon || key.endsWith(manifest.icon))) {
-        const mime = rel.endsWith(".svg") ? "image/svg+xml" : rel.endsWith(".png") ? "image/png" : "image/jpeg";
-        let binary = "";
-        for (let i = 0; i < rawBytes.length; i++) binary += String.fromCharCode(rawBytes[i]);
-        iconDataUrl = `data:${mime};base64,${btoa(binary)}`;
+
+      // Extract icon as data URL if not provided via iconUrl
+      if (!iconDataUrl && manifest.icon) {
+        const cleanIcon = manifest.icon.replace(/^\.?\//, "");
+        if (rel === cleanIcon || key.endsWith(cleanIcon)) {
+          const mime = rel.endsWith(".svg")
+            ? "image/svg+xml"
+            : rel.endsWith(".png")
+              ? "image/png"
+              : "image/jpeg";
+          let binary = "";
+          for (let i = 0; i < rawBytes.length; i++) binary += String.fromCharCode(rawBytes[i]);
+          iconDataUrl = `data:${mime};base64,${btoa(binary)}`;
+        }
       }
     }
+
+    const effectiveIcon = iconDataUrl || iconUrl || manifest.icon;
 
     const stored: StoredExtension = {
       id,
@@ -210,15 +319,16 @@ class ClientExtensionService {
       displayName: manifest.displayName || name,
       publisher,
       version: manifest.version || "0.0.0",
-      icon: manifest.icon,
-      iconDataUrl,
+      icon: effectiveIcon,
+      iconUrl: effectiveIcon,
       manifest,
       files,
       disabled: false,
     };
 
     this.extensions.set(id, stored);
-    this.save();
+    await idbSet(stored);
+    this.saveFallback();
     onProgress?.(100, 100, true);
 
     return {
@@ -231,7 +341,7 @@ class ClientExtensionService {
       active: true,
       runtime: Boolean(manifest.main),
       disabled: false,
-      icon: iconDataUrl || manifest.icon,
+      icon: effectiveIcon,
       commands: (manifest.contributes?.commands || []).map((c: any) => ({
         command: c.command,
         title: c.title || c.command,
@@ -250,7 +360,7 @@ class ClientExtensionService {
       active: true,
       runtime: Boolean(ext.manifest?.main),
       disabled: Boolean(ext.disabled),
-      icon: ext.iconDataUrl,
+      icon: ext.icon || ext.iconUrl,
       commands: (ext.manifest?.contributes?.commands || []).map((c: any) => ({
         command: c.command,
         title: c.title || c.command,
@@ -271,7 +381,7 @@ class ClientExtensionService {
       downloads: 0,
       rating: 5,
       publisher: ext.publisher,
-      iconUrl: ext.iconDataUrl,
+      iconUrl: ext.icon || ext.iconUrl,
       readme: ext.files["README.md"] || ext.files["readme.md"] || "",
       changelog: ext.files["CHANGELOG.md"] || "",
       categories: ext.manifest?.categories || [],
@@ -286,7 +396,8 @@ class ClientExtensionService {
     const ext = this.extensions.get(id);
     if (ext) {
       ext.disabled = false;
-      this.save();
+      void idbSet(ext);
+      this.saveFallback();
     }
   }
 
@@ -294,13 +405,15 @@ class ClientExtensionService {
     const ext = this.extensions.get(id);
     if (ext) {
       ext.disabled = true;
-      this.save();
+      void idbSet(ext);
+      this.saveFallback();
     }
   }
 
   uninstall(id: string): boolean {
     const deleted = this.extensions.delete(id);
-    this.save();
+    void idbDelete(id);
+    this.saveFallback();
     return deleted;
   }
 
