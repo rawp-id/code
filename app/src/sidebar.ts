@@ -13,6 +13,9 @@ export class FileTree {
   private rows = new Map<string, HTMLElement>();
   private activePath: string | null = null;
   private selected: { path: string; type: "file" | "dir" } | null = null;
+  private gen = 0;
+  private running: Promise<void> | null = null;
+  private queued = false;
 
   constructor(private el: HTMLElement, private onOpen: (path: string) => void) {
     this.el.innerHTML = "";
@@ -22,11 +25,24 @@ export class FileTree {
     bus.on("editor.active", ({ path }: { path: string }) => this.setActive(path));
   }
 
-  async refresh(): Promise<void> {
-    this.root.innerHTML = "";
-    this.rows.clear();
-    await this.renderInto("", this.root, 0);
-    if (this.activePath) this.setActive(this.activePath);
+  refresh(): Promise<void> {
+    if (this.running) {
+      this.queued = true;
+      return this.running;
+    }
+    this.running = (async () => {
+      do {
+        this.queued = false;
+        const gen = ++this.gen;
+        this.root.innerHTML = "";
+        this.rows.clear();
+        await this.renderInto("", this.root, 0, gen);
+        if (gen === this.gen && this.activePath) this.setActive(this.activePath);
+      } while (this.queued);
+    })().finally(() => {
+      this.running = null;
+    });
+    return this.running;
   }
 
   expandedPaths(): string[] {
@@ -137,16 +153,25 @@ export class FileTree {
     showContextMenu(event.clientX, event.clientY, items);
   }
 
-  private async renderInto(path: string, container: HTMLElement, depth: number): Promise<void> {
+  private async renderInto(
+    path: string,
+    container: HTMLElement,
+    depth: number,
+    gen: number
+  ): Promise<void> {
+    if (gen !== this.gen) return;
     let entries: DirEntry[] = [];
     try {
       entries = await bridge.request<DirEntry[]>("fs.readDir", { path });
     } catch (error: any) {
+      if (gen !== this.gen) return;
       container.textContent = `Failed to read ${path || "."}: ${error?.message}`;
       return;
     }
+    if (gen !== this.gen) return;
 
     for (const entry of entries) {
+      if (gen !== this.gen) return;
       const row = this.makeRow(entry, depth);
       this.rows.set(entry.path, row);
 
@@ -162,7 +187,8 @@ export class FileTree {
         if (this.expanded.has(entry.path)) {
           child.style.display = "block";
           child.dataset.loaded = "1";
-          await this.renderInto(entry.path, child, depth + 1);
+          await this.renderInto(entry.path, child, depth + 1, gen);
+          if (gen !== this.gen) return;
         }
       } else {
         row.onclick = () => {
@@ -273,7 +299,7 @@ export class FileTree {
       child.style.display = "block";
       if (!child.dataset.loaded) {
         child.dataset.loaded = "1";
-        await this.renderInto(entry.path, child, depth + 1);
+        await this.renderInto(entry.path, child, depth + 1, this.gen);
       }
     }
     this.updateIcon(entry, row);

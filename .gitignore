@@ -7,3 +7,6 @@ build/
 # installed extensions (managed by the app, not source)
 server/extensions/*
 !server/extensions/README.md
+
+# local screenshots / scratch
+issue_*.jpg
