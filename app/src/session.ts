@@ -2,6 +2,7 @@ export interface SessionState {
   workspaceRoot?: string;
   openDocs: string[];
   active?: string;
+  activeCursor?: number;
   expanded: string[];
   sidebarView: "files" | "search" | "extensions";
   panelVisible: boolean;

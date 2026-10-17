@@ -107,8 +107,14 @@ function styleFor(token: any): string {
 function buildDecorations(view: EditorView, tokens: any[][]): DecorationSet {
   const total = view.state.doc.length;
   const ranges = view.visibleRanges;
-  const from = ranges.length ? ranges[0].from : 0;
-  const to = ranges.length ? ranges[ranges.length - 1].to : total;
+  let from = ranges.length ? ranges[0].from : 0;
+  let to = ranges.length ? ranges[ranges.length - 1].to : total;
+  // Before the view has been measured, visibleRanges can be empty/degenerate;
+  // fall back to the whole document so highlighting appears immediately.
+  if (to <= from) {
+    from = 0;
+    to = total;
+  }
 
   const marks = new Map<string, Decoration>();
   const ranges2: { from: number; to: number; deco: Decoration }[] = [];
@@ -155,7 +161,7 @@ class ShikiRunner {
   }
 
   update(update: ViewUpdate): void {
-    if (update.docChanged || update.viewportChanged) this.schedule(60);
+    if (update.docChanged || update.viewportChanged || update.geometryChanged) this.schedule(60);
   }
 
   destroy(): void {

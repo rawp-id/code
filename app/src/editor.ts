@@ -264,7 +264,19 @@ export class EditorManager {
     this.fire();
   }
 
-  /** Open a file and put the cursor at a 1-based line / 0-based column. */
+  /** Open a file and put the cursor at a 1-based line / 0-based column. */  cursorOffset(path: string): number | undefined {
+    return this.docs.get(path)?.state.selection.main.head;
+  }
+
+  setCursorOffset(path: string, offset: number): void {
+    const doc = this.docs.get(path);
+    if (!doc) return;
+    if (this.active !== path) this.activate(path);
+    const state = this.view.state;
+    const position = Math.min(Math.max(offset, 0), state.doc.length);
+    this.view.dispatch({ selection: { anchor: position }, scrollIntoView: true });
+  }
+
   async openAt(path: string, line = 1, column = 0): Promise<void> {
     await this.open(path);
     if (!this.docs.has(path)) return;

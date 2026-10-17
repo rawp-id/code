@@ -131,6 +131,7 @@ function buildSession() {
     workspaceRoot: workspaceRoot || undefined,
     openDocs: editor.openDocs.map((doc) => doc.path),
     active: editor.active || undefined,
+    activeCursor: editor.active ? editor.cursorOffset(editor.active) : undefined,
     expanded: filetree.expandedPaths(),
     sidebarView: activeView,
     panelVisible: !layout.panel.classList.contains("hidden"),
@@ -466,6 +467,9 @@ async function init(): Promise<void> {
       }
     }
     if (session.active && editor.get(session.active)) editor.activate(session.active);
+    if (session.active && session.activeCursor !== undefined && editor.get(session.active)) {
+      editor.setCursorOffset(session.active, session.activeCursor);
+    }
   } else {
     await filetree.refresh();
     try {
