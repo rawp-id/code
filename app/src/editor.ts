@@ -32,10 +32,11 @@ import {
   type CompletionContext,
 } from "@codemirror/autocomplete";
 import { setDiagnostics, lintGutter, lintKeymap, type Diagnostic } from "@codemirror/lint";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { oneDarkTheme } from "@codemirror/theme-one-dark";
 import { bridge } from "./bridge";
 import { bus } from "./bus";
 import { languageFor } from "./lang";
+import { shikiHighlighting } from "./highlight";
 
 export interface OpenDoc {
   path: string;
@@ -99,7 +100,7 @@ export class EditorManager {
   private emptyState(): EditorState {
     return EditorState.create({
       doc: "",
-      extensions: [EditorView.editable.of(false), oneDark],
+      extensions: [EditorView.editable.of(false), oneDarkTheme],
     });
   }
 
@@ -125,7 +126,8 @@ export class EditorManager {
       highlightSelectionMatches(),
       lintGutter(),
       this.hoverTooltip(),
-      oneDark,
+      oneDarkTheme,
+      shikiHighlighting(spec.shiki),
       ...spec.extensions,
       keymap.of([
         ...closeBracketsKeymap,

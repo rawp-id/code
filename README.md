@@ -17,7 +17,10 @@ server/   Node process: workspace FS, terminal (pty), extension host, LSP
   that lists the server's directories (with `~` / parent navigation) and also
   accepts a typed path.
 - Tabs, save (`Ctrl+S`), dirty indicators.
-- Syntax highlighting for JS/TS, JSON, HTML, CSS, Markdown, Python.
+- **TextMate syntax highlighting** via **Shiki** (the same engine VS Code uses)
+  with ~30 languages loaded on demand: JS/TS/JSX/TSX, JSON, HTML, Vue, Svelte,
+  CSS/SCSS/Less, Markdown, Python, Rust, Go, Java, Kotlin, C/C++, C#, PHP, Ruby,
+  Shell, YAML, TOML, SQL, XML, INI, Diff, Dockerfile, Makefile.
 - Command palette (`Ctrl+Shift+P`) with built-in and extension commands.
 - **Search in files** — sidebar search view (`Ctrl+Shift+F`) with case, regex and
   whole-word options; results are grouped per file and clicking one opens the
