@@ -33,7 +33,7 @@ interface DetailData extends MarketplaceExtension {
 }
 
 type Tab = "installed" | "marketplace";
-type InstalledFilter = "all" | "active" | "inactive";
+type InstalledFilter = "all" | "enabled" | "disabled";
 type Sort = "relevance" | "installs";
 type Registry = "open-vsx" | "vscode";
 
@@ -273,8 +273,8 @@ export class ExtensionsView {
     if (this.tab === "installed") {
       for (const [value, label] of [
         ["all", "All"],
-        ["active", "Enabled"],
-        ["inactive", "Disabled"],
+        ["enabled", "Enabled"],
+        ["disabled", "Disabled"],
       ] as [InstalledFilter, string][]) {
         const chip = document.createElement("button");
         chip.className = "ext-chip" + (this.installedFilter === value ? " active" : "");
@@ -338,8 +338,8 @@ export class ExtensionsView {
   private renderInstalled(): void {
     const query = this.searchEl.value.trim().toLowerCase();
     let list = this.installed;
-    if (this.installedFilter === "active") list = list.filter((item) => item.active);
-    if (this.installedFilter === "inactive") list = list.filter((item) => !item.active);
+    if (this.installedFilter === "enabled") list = list.filter((item) => !item.disabled);
+    if (this.installedFilter === "disabled") list = list.filter((item) => item.disabled);
     if (query) {
       list = list.filter(
         (item) =>
@@ -542,7 +542,7 @@ export class ExtensionsView {
       version: extension.version,
       description: extension.runtime ? "Extension with runtime code" : "Declarative extension",
       meta: `${extension.id} · ${extension.runtime ? "runtime" : "declarative"}${
-        extension.active ? " · active" : ""
+        extension.disabled ? " · disabled" : ""
       }`,
     });
     card.onclick = () => this.openDetail(extension.id);
