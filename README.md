@@ -99,8 +99,9 @@ shim; `require('fs')`, `require('path')`, and other Node builtins work normally.
 The **Extensions** view works like VS Code: the search box filters installed
 extensions when empty and searches the marketplace when you type. Pick a
 registry with the dropdown — **Open VSX** or the **VS Code Marketplace** — then
-press **Install**. Installed entries show a `Run command` button and
-`Uninstall`.
+press **Install**. Installed entries show an `Enable`/`Disable` toggle and
+`Uninstall` (disabled extensions are not activated and their commands leave the
+palette).
 
 Click any extension to open its **detail page**: icon, publisher, version,
 installs, rating, tags, license, repository link and the README (markdown from

@@ -30,6 +30,7 @@ export interface ExtensionInfo {
   main?: string;
   active: boolean;
   runtime: boolean;
+  disabled: boolean;
   icon?: string;
   commands: ExtensionCommand[];
 }
@@ -143,6 +144,7 @@ export class ExtensionHost {
   private contexts = new Map<string, { subscriptions: { dispose(): void }[] }>();
   private scanned = false;
   private startupActivated = false;
+  private disabled = new Set<string>();
 
   private documents = new Map<string, DocEntry>();
   private activeUri: string | null = null;
@@ -170,6 +172,7 @@ export class ExtensionHost {
 
   async scan(): Promise<ExtensionInfo[]> {
     this.extensions.clear();
+    await this.loadDisabled();
     let entries: string[] = [];
     try {
       entries = await fs.readdir(this.dir);
@@ -197,6 +200,7 @@ export class ExtensionHost {
           main: manifest.main,
           active: false,
           runtime: Boolean(manifest.main),
+          disabled: false,
           icon: manifest.icon,
           commands,
           manifest,
@@ -213,6 +217,7 @@ export class ExtensionHost {
     return [...this.extensions.values()].map(({ manifest, ...info }) => ({
       ...info,
       active: this.activated.has(info.id),
+      disabled: this.disabled.has(info.id),
     }));
   }
 
@@ -225,7 +230,7 @@ export class ExtensionHost {
   async activate(id: string): Promise<ExtensionInfo | null> {
     if (!this.scanned) await this.scan();
     const ext = this.extensions.get(id);
-    if (!ext) return null;
+    if (!ext || this.disabled.has(id)) return this.list().find((e) => e.id === id) || null;
     if (this.activated.has(id)) return this.list().find((e) => e.id === id) || null;
 
     const mainRel = ext.main || "./extension.js";
@@ -275,6 +280,40 @@ export class ExtensionHost {
     this.activatedExports.delete(id);
   }
 
+  async disable(id: string): Promise<void> {
+    if (!this.scanned) await this.scan();
+    await this.deactivate(id).catch(() => undefined);
+    this.disabled.add(id);
+    await this.saveDisabled();
+  }
+
+  async enable(id: string): Promise<void> {
+    if (!this.scanned) await this.scan();
+    this.disabled.delete(id);
+    await this.saveDisabled();
+  }
+
+  private async loadDisabled(): Promise<void> {
+    try {
+      const raw = JSON.parse(await fs.readFile(path.join(this.dir, ".disabled.json"), "utf8"));
+      this.disabled = new Set(Array.isArray(raw) ? raw : []);
+    } catch {
+      this.disabled = new Set();
+    }
+  }
+
+  private async saveDisabled(): Promise<void> {
+    try {
+      await fs.writeFile(
+        path.join(this.dir, ".disabled.json"),
+        JSON.stringify([...this.disabled].sort(), null, 2) + "\n",
+        "utf8"
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
   async executeCommand(command: string, args: any[] = []): Promise<any> {
     if (!this.scanned) await this.scan();
     let entry = this.commands.get(command);
@@ -283,7 +322,7 @@ export class ExtensionHost {
       const owner = [...this.extensions.values()].find((ext) =>
         ext.commands.some((c) => c.command === command)
       );
-      if (owner) {
+      if (owner && !this.disabled.has(owner.id)) {
         await this.activate(owner.id);
         entry = this.commands.get(command);
       }
@@ -298,6 +337,7 @@ export class ExtensionHost {
     this.startupActivated = true;
     if (!this.scanned) await this.scan();
     for (const ext of this.extensions.values()) {
+      if (this.disabled.has(ext.id)) continue;
       const events: string[] = ext.manifest?.activationEvents || [];
       if (!events.includes("*") && !events.includes("onStartupFinished")) continue;
       try {

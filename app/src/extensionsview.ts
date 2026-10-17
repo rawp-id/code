@@ -1,6 +1,5 @@
 import { bridge, httpBase, type ExtensionInfo } from "./bridge";
 import { icons } from "./icons";
-import { showQuickPick } from "./palette";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 
@@ -323,6 +322,11 @@ export class ExtensionsView {
             id,
           });
       this.detail = { data: detail, installed };
+      if (installed && !detail.iconUrl && (detail as any).icon) {
+        detail.iconUrl = `${httpBase()}/ext-asset?ext=${encodeURIComponent(
+          detail.id
+        )}&path=${encodeURIComponent((detail as any).icon)}`;
+      }
       this.render();
     } catch (error: any) {
       this.listEl.innerHTML = `<div class="ext-empty">Failed to load details: ${error?.message}</div>`;
@@ -416,23 +420,25 @@ export class ExtensionsView {
 
   private buildActions(actions: HTMLElement, detail: DetailData, installed: boolean): void {
     if (installed) {
-      if (detail.commands?.length) {
-        const run = document.createElement("button");
-        run.className = "ext-btn";
-        run.textContent = `Run command (${detail.commands.length})`;
-        run.onclick = async (event) => {
-          event.stopPropagation();
-          const choice = await showQuickPick(
-            detail.commands!.map((command) => ({
-              label: command.title,
-              description: command.command,
-              command: command.command,
-            }))
-          );
-          if (choice) this.onRunCommand(detail.id, choice.command);
-        };
-        actions.append(run);
-      }
+      const info = this.installed.find((item) => item.id === detail.id);
+      const disabled = info?.disabled ?? false;
+      const toggle = document.createElement("button");
+      toggle.className = "ext-btn";
+      toggle.textContent = disabled ? "Enable" : "Disable";
+      toggle.onclick = async (event) => {
+        event.stopPropagation();
+        toggle.disabled = true;
+        try {
+          await bridge.request(disabled ? "ext.enable" : "ext.disable", { id: detail.id });
+          this.detail = null;
+          await this.refresh();
+          this.onChanged?.();
+        } finally {
+          toggle.disabled = false;
+        }
+      };
+      actions.append(toggle);
+
       const remove = document.createElement("button");
       remove.className = "ext-btn";
       remove.textContent = "Uninstall";
@@ -490,23 +496,22 @@ export class ExtensionsView {
     card.onclick = () => this.openDetail(extension.id);
 
     const actions = card.querySelector(".ext-actions")!;
-    if (extension.commands.length > 0) {
-      const run = document.createElement("button");
-      run.className = "ext-btn";
-      run.textContent = `Run command (${extension.commands.length})`;
-      run.onclick = async (event) => {
-        event.stopPropagation();
-        const choice = await showQuickPick(
-          extension.commands.map((command) => ({
-            label: command.title,
-            description: command.command,
-            command: command.command,
-          }))
-        );
-        if (choice) this.onRunCommand(extension.id, choice.command);
-      };
-      actions.append(run);
-    }
+    const toggle = document.createElement("button");
+    toggle.className = "ext-btn";
+    toggle.textContent = extension.disabled ? "Enable" : "Disable";
+    toggle.onclick = async (event) => {
+      event.stopPropagation();
+      toggle.disabled = true;
+      try {
+        await bridge.request(extension.disabled ? "ext.enable" : "ext.disable", {
+          id: extension.id,
+        });
+      } finally {
+        await this.refresh();
+        this.onChanged?.();
+      }
+    };
+    actions.append(toggle);
 
     const remove = document.createElement("button");
     remove.className = "ext-btn";

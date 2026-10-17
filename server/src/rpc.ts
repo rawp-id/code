@@ -172,6 +172,14 @@ export function handleConnection(ws: WebSocket): void {
     },
     "ext.activate": ({ id }: { id: string }) => host.activate(id),
     "ext.deactivate": ({ id }: { id: string }) => host.deactivate(id),
+    "ext.enable": async ({ id }: { id: string }) => {
+      await host.enable(id);
+      return true;
+    },
+    "ext.disable": async ({ id }: { id: string }) => {
+      await host.disable(id);
+      return true;
+    },
     "ext.commands": () =>
       [...host.commands.entries()].map(([command, entry]) => ({
         command,

@@ -214,6 +214,7 @@ async function updateExtensionCommands(): Promise<void> {
   }
   const extensionCommands: Command[] = [];
   for (const extension of extensions) {
+    if (extension.disabled) continue;
     for (const command of extension.commands) {
       extensionCommands.push({
         id: command.command,

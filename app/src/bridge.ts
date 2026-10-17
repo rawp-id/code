@@ -13,6 +13,7 @@ export interface ExtensionInfo {
   dir: string;
   active: boolean;
   runtime: boolean;
+  disabled: boolean;
   icon?: string;
   commands: { command: string; title: string }[];
 }
