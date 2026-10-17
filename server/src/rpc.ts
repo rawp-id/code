@@ -195,8 +195,15 @@ export function handleConnection(ws: WebSocket): void {
       await host.scan();
       return removed;
     },
-    "ext.marketplace.search": ({ registry, query, size, offset }: any) =>
-      searchMarketplace((registry as Registry) || "open-vsx", String(query || ""), size || 30, offset || 0),
+    "ext.marketplace.search": ({ registry, query, size, offset, sortBy, sortOrder }: any) =>
+      searchMarketplace(
+        (registry as Registry) || "open-vsx",
+        String(query ?? ""),
+        size || 30,
+        offset || 0,
+        sortBy,
+        sortOrder
+      ),
     "ext.marketplace.install": async ({ downloadUrl }: { downloadUrl: string }) => {
       if (!downloadUrl) throw new Error("Missing download url");
       const info = await installVsix(EXTENSIONS_DIR, { url: downloadUrl });

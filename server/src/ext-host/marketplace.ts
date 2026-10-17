@@ -36,20 +36,41 @@ export async function searchMarketplace(
   registry: Registry,
   query: string,
   size = 30,
-  offset = 0
+  offset = 0,
+  sortBy?: string,
+  sortOrder?: string
 ): Promise<MarketplaceSearchResult> {
-  if (!query.trim()) return { extensions: [], total: 0 };
+  if (registry === "vscode" && !query.trim()) return { extensions: [], total: 0 };
   return registry === "vscode"
-    ? searchVsMarketplace(query, size, offset)
-    : searchOpenVsx(query, size, offset);
+    ? searchVsMarketplace(query, size, offset, sortBy)
+    : searchOpenVsx(query, size, offset, sortBy, sortOrder);
 }
 
 async function searchOpenVsx(
   query: string,
   size: number,
-  offset: number
+  offset: number,
+  sortBy?: string,
+  sortOrder?: string
 ): Promise<MarketplaceSearchResult> {
-  const url = `${OPEN_VSX}/-/search?query=${encodeURIComponent(query)}&size=${size}&offset=${offset}`;
+  const params = new URLSearchParams({
+    query,
+    size: String(size),
+    offset: String(offset),
+  });
+  if (sortBy) {
+    const sortMap: Record<string, string> = {
+      installs: "downloadCount",
+      rating: "relevance",
+      updated: "timestamp",
+    };
+    const value = sortMap[sortBy] ?? sortBy;
+    if (value) {
+      params.set("sortBy", value);
+      params.set("sortOrder", sortOrder || "desc");
+    }
+  }
+  const url = `${OPEN_VSX}/-/search?${params.toString()}`;
   const response = await fetch(url, { headers: { accept: "application/json" } });
   if (!response.ok) throw new Error(`Open VSX search failed: ${response.status}`);
   const data: any = await response.json();
@@ -150,11 +171,18 @@ async function vsDetail(namespace: string, name: string): Promise<MarketplaceDet
 async function queryVsMarketplace(
   criteria: any[],
   pageSize: number,
-  offset: number
+  offset: number,
+  sortBy = 0
 ): Promise<any> {
   const body = {
     filters: [
-      { criteria, pageNumber: Math.floor(offset / pageSize) + 1, pageSize, sortBy: 0, sortOrder: 0 },
+      {
+        criteria,
+        pageNumber: Math.floor(offset / pageSize) + 1,
+        pageSize,
+        sortBy,
+        sortOrder: 0,
+      },
     ],
     assetTypes: [],
     flags: 951,
@@ -185,9 +213,16 @@ async function fetchText(url: string): Promise<string> {
 async function searchVsMarketplace(
   query: string,
   size: number,
-  offset: number
+  offset: number,
+  sortBy?: string
 ): Promise<MarketplaceSearchResult> {
-  const data = await queryVsMarketplace([{ filterType: 10, value: query }], size, offset);
+  const sortMap: Record<string, number> = { relevance: 0, installs: 4, rating: 6, updated: 1 };
+  const data = await queryVsMarketplace(
+    [{ filterType: 10, value: query }],
+    size,
+    offset,
+    sortMap[sortBy || "relevance"] ?? 0
+  );
   const result = data.results?.[0];
   const extensions: MarketplaceExtension[] = (result?.extensions || []).map((item: any) => {
     const version = item.versions?.[0] ?? {};

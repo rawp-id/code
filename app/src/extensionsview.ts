@@ -33,6 +33,11 @@ interface DetailData extends MarketplaceExtension {
   commands?: { command: string; title: string }[];
 }
 
+type Tab = "installed" | "marketplace";
+type InstalledFilter = "all" | "active" | "inactive";
+type Sort = "relevance" | "installs";
+type Registry = "open-vsx" | "vscode";
+
 function formatDownloads(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
@@ -47,12 +52,22 @@ function renderMarkdown(text?: string, isHtml?: boolean): string {
 
 export class ExtensionsView {
   private searchEl: HTMLInputElement;
-  private registryEl: HTMLSelectElement;
+  private tabsEl: HTMLElement;
+  private filtersEl: HTMLElement;
   private sectionEl: HTMLElement;
   private listEl: HTMLElement;
+
   private installed: ExtensionInfo[] = [];
-  private results: MarketplaceResult | null = null;
-  private detailId: string | null = null;
+  private popular: MarketplaceExtension[] = [];
+  private results: MarketplaceExtension[] = [];
+  private resultTotal = 0;
+
+  private tab: Tab = "installed";
+  private installedFilter: InstalledFilter = "all";
+  private sort: Sort = "relevance";
+  private registry: Registry = "open-vsx";
+
+  private detail: { data: DetailData; installed: boolean } | null = null;
   private timer: number | undefined;
   private searchSeq = 0;
 
@@ -65,23 +80,36 @@ export class ExtensionsView {
       <div class="extensions-view">
         <div class="ext-search">
           <input type="text" spellcheck="false" placeholder="Search Extensions" data-ext-search />
-          <select data-ext-registry title="Registry">
-            <option value="open-vsx">Open VSX</option>
-            <option value="vscode">VS Code Marketplace</option>
-          </select>
         </div>
-        <div class="ext-section" data-ext-section>Installed</div>
+        <div class="ext-tabs" data-ext-tabs>
+          <button data-ext-tab="installed">Installed</button>
+          <button data-ext-tab="marketplace">Marketplace</button>
+        </div>
+        <div class="ext-filters" data-ext-filters></div>
+        <div class="ext-section" data-ext-section></div>
         <div class="ext-list" data-ext-list></div>
       </div>
     `;
     this.searchEl = this.el.querySelector<HTMLInputElement>("[data-ext-search]")!;
-    this.registryEl = this.el.querySelector<HTMLSelectElement>("[data-ext-registry]")!;
+    this.tabsEl = this.el.querySelector<HTMLElement>("[data-ext-tabs]")!;
+    this.filtersEl = this.el.querySelector<HTMLElement>("[data-ext-filters]")!;
     this.sectionEl = this.el.querySelector<HTMLElement>("[data-ext-section]")!;
     this.listEl = this.el.querySelector<HTMLElement>("[data-ext-list]")!;
 
-    this.searchEl.addEventListener("input", () => this.scheduleSearch());
-    this.registryEl.addEventListener("change", () => {
-      if (this.searchEl.value.trim()) this.runSearch();
+    this.searchEl.addEventListener("input", () => {
+      this.detail = null;
+      window.clearTimeout(this.timer);
+      if (this.tab === "marketplace") {
+        this.timer = window.setTimeout(() => this.runSearch(), 300);
+      } else {
+        this.render();
+      }
+    });
+
+    this.tabsEl.addEventListener("click", (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLElement>("[data-ext-tab]");
+      if (!button?.dataset.extTab) return;
+      this.setTab(button.dataset.extTab as Tab);
     });
   }
 
@@ -95,44 +123,58 @@ export class ExtensionsView {
     } catch {
       this.installed = [];
     }
-    if (this.detailId) {
-      await this.openDetail(this.detailId, { keepScroll: true });
-      return;
-    }
-    if (this.searchEl.value.trim() && this.results) this.renderMarketplace(this.results);
-    else this.renderInstalled();
+    if (this.popular.length === 0) await this.loadPopular();
+    this.render();
+  }
+
+  private setTab(tab: Tab): void {
+    this.tab = tab;
+    this.detail = null;
+    if (tab === "marketplace" && this.searchEl.value.trim()) void this.runSearch();
+    this.render();
   }
 
   private isInstalled(id: string): boolean {
     return this.installed.some((item) => item.id === id);
   }
 
-  private scheduleSearch(): void {
-    window.clearTimeout(this.timer);
-    this.detailId = null;
-    if (!this.searchEl.value.trim()) {
-      this.results = null;
-      this.renderInstalled();
-      return;
+  private async loadPopular(): Promise<void> {
+    try {
+      const result = await bridge.request<MarketplaceResult>("ext.marketplace.search", {
+        registry: "open-vsx",
+        query: "",
+        size: 30,
+        sortBy: "installs",
+        sortOrder: "desc",
+      });
+      this.popular = result.extensions;
+    } catch {
+      this.popular = [];
     }
-    this.timer = window.setTimeout(() => this.runSearch(), 300);
   }
 
   private async runSearch(): Promise<void> {
     const query = this.searchEl.value.trim();
-    if (!query) return;
+    if (!query) {
+      this.results = [];
+      this.resultTotal = 0;
+      this.render();
+      return;
+    }
     const seq = ++this.searchSeq;
     this.sectionEl.textContent = "Searching…";
     this.listEl.innerHTML = "";
     try {
       const result = await bridge.request<MarketplaceResult>("ext.marketplace.search", {
-        registry: this.registryEl.value,
+        registry: this.registry,
         query,
         size: 30,
+        sortBy: this.sort,
       });
       if (seq !== this.searchSeq) return;
-      this.results = result;
-      this.renderMarketplace(result);
+      this.results = result.extensions;
+      this.resultTotal = result.total;
+      this.render();
     } catch (error: any) {
       if (seq !== this.searchSeq) return;
       this.sectionEl.textContent = "Marketplace";
@@ -140,54 +182,151 @@ export class ExtensionsView {
     }
   }
 
+  // ---- rendering ----------------------------------------------------------
+
+  private render(): void {
+    this.tabsEl
+      .querySelectorAll<HTMLElement>("[data-ext-tab]")
+      .forEach((button) => button.classList.toggle("active", button.dataset.extTab === this.tab));
+
+    this.renderFilters();
+
+    if (this.detail) {
+      this.renderDetail(this.detail.data, this.detail.installed);
+      return;
+    }
+    if (this.tab === "installed") this.renderInstalled();
+    else this.renderMarketplace();
+  }
+
+  private renderFilters(): void {
+    this.filtersEl.innerHTML = "";
+    if (this.detail) {
+      this.filtersEl.style.display = "none";
+      return;
+    }
+    this.filtersEl.style.display = "";
+
+    if (this.tab === "installed") {
+      for (const [value, label] of [
+        ["all", "All"],
+        ["active", "Active"],
+        ["inactive", "Inactive"],
+      ] as [InstalledFilter, string][]) {
+        const chip = document.createElement("button");
+        chip.className = "ext-chip" + (this.installedFilter === value ? " active" : "");
+        chip.textContent = label;
+        chip.onclick = () => {
+          this.installedFilter = value;
+          this.render();
+        };
+        this.filtersEl.append(chip);
+      }
+      return;
+    }
+
+    if (this.tab === "marketplace") {
+      const registry = document.createElement("select");
+      registry.title = "Registry";
+      for (const [value, label] of [
+        ["open-vsx", "Open VSX"],
+        ["vscode", "VS Code Marketplace"],
+      ] as [Registry, string][]) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        if (this.registry === value) option.selected = true;
+        registry.append(option);
+      }
+      registry.onchange = () => {
+        this.registry = registry.value as Registry;
+        if (this.searchEl.value.trim()) void this.runSearch();
+        else this.render();
+      };
+      this.filtersEl.append(registry);
+    }
+
+    this.filtersEl.append(this.sortSelect());
+  }
+
+  private sortSelect(): HTMLElement {
+    const select = document.createElement("select");
+    select.title = "Sort";
+    const options: [Sort, string][] = [
+      ["relevance", "Relevance"],
+      ["installs", "Most installed"],
+    ];
+    if (!options.some(([value]) => value === this.sort)) this.sort = options[0][0];
+    for (const [value, label] of options) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      if (this.sort === value) option.selected = true;
+      select.append(option);
+    }
+    select.onchange = () => {
+      this.sort = select.value as Sort;
+      if (this.searchEl.value.trim()) void this.runSearch();
+      else void this.loadPopular().then(() => this.render());
+    };
+    return select;
+  }
+
   private renderInstalled(): void {
-    this.sectionEl.textContent = `Installed (${this.installed.length})`;
+    const query = this.searchEl.value.trim().toLowerCase();
+    let list = this.installed;
+    if (this.installedFilter === "active") list = list.filter((item) => item.active);
+    if (this.installedFilter === "inactive") list = list.filter((item) => !item.active);
+    if (query) {
+      list = list.filter(
+        (item) =>
+          item.displayName.toLowerCase().includes(query) || item.id.toLowerCase().includes(query)
+      );
+    }
+
+    this.sectionEl.textContent = `Installed (${list.length})`;
     this.listEl.innerHTML = "";
-    if (this.installed.length === 0) {
+    if (list.length === 0) {
       this.listEl.innerHTML = `<div class="ext-empty">No extensions installed.</div>`;
       return;
     }
-    for (const extension of this.installed) this.listEl.append(this.installedCard(extension));
+    for (const extension of list) this.listEl.append(this.installedCard(extension));
   }
 
-  private renderMarketplace(result: MarketplaceResult): void {
-    this.sectionEl.textContent = `Marketplace · ${result.total} results`;
+  private renderMarketplace(): void {
+    const query = this.searchEl.value.trim();
+    const list = query ? this.results : this.popular;
+
+    this.sectionEl.textContent = query
+      ? `Marketplace · ${this.resultTotal} results`
+      : `Marketplace · popular`;
     this.listEl.innerHTML = "";
-    if (result.extensions.length === 0) {
-      this.listEl.innerHTML = `<div class="ext-empty">No extensions found.</div>`;
+    if (list.length === 0) {
+      this.listEl.innerHTML = `<div class="ext-empty">${
+        query ? "No extensions found." : "Type to search the marketplace."
+      }</div>`;
       return;
     }
-    for (const extension of result.extensions) this.listEl.append(this.marketplaceCard(extension));
+    for (const extension of list) this.listEl.append(this.marketplaceCard(extension));
   }
 
   // ---- detail -------------------------------------------------------------
 
-  private async openDetail(id: string, options: { keepScroll?: boolean } = {}): Promise<void> {
-    this.detailId = id;
+  private async openDetail(id: string): Promise<void> {
     const installed = this.isInstalled(id);
-    if (!options.keepScroll) {
-      this.sectionEl.textContent = "";
-      this.listEl.innerHTML = `<div class="ext-empty">Loading…</div>`;
-    }
+    this.listEl.innerHTML = `<div class="ext-empty">Loading…</div>`;
     try {
       const detail: DetailData = installed
         ? await bridge.request<DetailData>("ext.detail", { id })
         : await bridge.request<DetailData>("ext.marketplace.detail", {
-            registry: this.registryEl.value,
+            registry: this.registry,
             id,
           });
-      if (this.detailId !== id) return;
-      this.renderDetail(detail, installed);
+      this.detail = { data: detail, installed };
+      this.render();
     } catch (error: any) {
-      if (this.detailId !== id) return;
       this.listEl.innerHTML = `<div class="ext-empty">Failed to load details: ${error?.message}</div>`;
     }
-  }
-
-  private showList(): void {
-    this.detailId = null;
-    if (this.searchEl.value.trim()) this.runSearch();
-    else this.renderInstalled();
   }
 
   private renderDetail(detail: DetailData, installed: boolean): void {
@@ -200,7 +339,10 @@ export class ExtensionsView {
     const back = document.createElement("button");
     back.className = "ext-back";
     back.innerHTML = `${icons.chevronLeft}<span>Back</span>`;
-    back.onclick = () => this.showList();
+    back.onclick = () => {
+      this.detail = null;
+      this.render();
+    };
     wrapper.append(back);
 
     const header = document.createElement("div");
@@ -259,9 +401,13 @@ export class ExtensionsView {
 
     const readme = document.createElement("div");
     readme.className = "markdown ext-readme";
-    const html = renderMarkdown(detail.readme, detail.readmeIsHtml);
-    readme.innerHTML = html || `<p class="ext-empty">No README available.</p>`;
-    this.makeLinksExternal(readme);
+    readme.innerHTML =
+      renderMarkdown(detail.readme, detail.readmeIsHtml) ||
+      `<p class="ext-empty">No README available.</p>`;
+    readme.querySelectorAll("a").forEach((link) => {
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    });
     wrapper.append(readme);
 
     this.listEl.append(wrapper);
@@ -296,6 +442,7 @@ export class ExtensionsView {
         try {
           await bridge.request("ext.uninstall", { id: detail.id });
         } finally {
+          this.detail = null;
           await this.refresh();
           this.onChanged?.();
         }
@@ -313,6 +460,7 @@ export class ExtensionsView {
       install.textContent = "Installing…";
       try {
         await bridge.request("ext.marketplace.install", { downloadUrl: detail.downloadUrl });
+        this.detail = null;
         await this.refresh();
         this.onChanged?.();
       } catch (error: any) {
@@ -323,13 +471,6 @@ export class ExtensionsView {
       }
     };
     actions.append(install);
-  }
-
-  private makeLinksExternal(container: HTMLElement): void {
-    container.querySelectorAll("a").forEach((link) => {
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-    });
   }
 
   // ---- cards --------------------------------------------------------------
