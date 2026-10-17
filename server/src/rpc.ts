@@ -68,7 +68,7 @@ export function handleConnection(ws: WebSocket): void {
 
   const host = new ExtensionHost(EXTENSIONS_DIR, workspace.root, ui);
 
-  const DEFAULT_PS1 = "\\u@\\h \\W \\$ ";
+  const DEFAULT_PS1 = "\\u@\\h \\w \\$ ";
   const terminalEnv = async (): Promise<Record<string, string>> => {
     const settings = await workspace.readSettings();
     const terminal = (settings.terminal ?? {}) as Record<string, unknown>;

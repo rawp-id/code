@@ -7,7 +7,8 @@ export class TerminalPanel {
   readonly term: Terminal;
   private fit = new FitAddon();
   private id: string | null = null;
-  private started = false;
+  private startPromise: Promise<void> | null = null;
+  private pending = "";
 
   constructor(private host: HTMLElement) {
     this.term = new Terminal({
@@ -24,8 +25,20 @@ export class TerminalPanel {
     this.term.open(host);
 
     this.term.onData((data) => {
-      if (this.id) bridge.request("pty.write", { id: this.id, data });
+      if (this.id) {
+        this.write(data);
+        return;
+      }
+      // The shell has not started or has exited: restart lazily and replay input.
+      this.pending += data;
+      this.ensureStarted().then(() => {
+        if (this.id && this.pending) {
+          this.write(this.pending);
+          this.pending = "";
+        }
+      });
     });
+
     this.term.onResize(({ cols, rows }) => {
       if (this.id) bridge.request("pty.resize", { id: this.id, cols, rows });
     });
@@ -34,19 +47,30 @@ export class TerminalPanel {
       if (id === this.id) this.term.write(data);
     });
     bridge.on("pty.exit", ({ id, code }) => {
-      if (id === this.id) {
-        this.term.writeln(`\r\n\x1b[90m[process exited with code ${code}]\x1b[0m`);
-        this.id = null;
-        this.started = false;
-      }
+      if (id !== this.id) return;
+      this.id = null;
+      this.term.writeln(
+        `\r\n\x1b[90m[process exited with code ${code} — press a key to restart]\x1b[0m`
+      );
     });
 
     window.addEventListener("resize", () => this.fitNow());
   }
 
-  async ensureStarted(): Promise<void> {
-    if (this.started) return;
-    this.started = true;
+  private write(data: string): void {
+    if (this.id) bridge.request("pty.write", { id: this.id, data });
+  }
+
+  ensureStarted(): Promise<void> {
+    if (this.id) return Promise.resolve();
+    if (this.startPromise) return this.startPromise;
+    this.startPromise = this.doStart().finally(() => {
+      this.startPromise = null;
+    });
+    return this.startPromise;
+  }
+
+  private async doStart(): Promise<void> {
     this.fitNow();
     try {
       const { id } = await bridge.request<{ id: string }>("pty.spawn", {
@@ -56,7 +80,6 @@ export class TerminalPanel {
       this.id = id;
     } catch (error: any) {
       this.term.writeln(`\x1b[31mFailed to start terminal: ${error?.message}\x1b[0m`);
-      this.started = false;
     }
   }
 

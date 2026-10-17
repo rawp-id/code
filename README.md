@@ -108,12 +108,12 @@ whatever started the server cannot spam errors. Configure it in
 `settings.json`:
 
 ```json
-{ "terminal": { "prompt": "\\u@\\h \\W \\$ " } }
+{ "terminal": { "prompt": "\\u@\\h \\w \\$ " } }
 ```
 
-Set `"prompt": false` to leave the shell's own prompt untouched. `PS2`,
-`PROMPT_COMMAND`, `BASH_ENV` and `ENV` are always stripped from the spawned
-shell.
+`\\w` is the full path and `\\W` only the folder name. Set `"prompt": false` to
+leave the shell's own prompt untouched. `PS2`, `PROMPT_COMMAND`, `BASH_ENV` and
+`ENV` are always stripped from the spawned shell.
 
 ## Language servers
 
