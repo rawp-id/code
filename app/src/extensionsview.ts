@@ -1,6 +1,8 @@
 import { bridge, type ExtensionInfo } from "./bridge";
 import { icons } from "./icons";
 import { showQuickPick } from "./palette";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 
 interface MarketplaceExtension {
   id: string;
@@ -21,10 +23,26 @@ interface MarketplaceResult {
   total: number;
 }
 
+interface DetailData extends MarketplaceExtension {
+  readme?: string;
+  changelog?: string;
+  readmeIsHtml?: boolean;
+  repository?: string;
+  license?: string;
+  categories?: string[];
+  commands?: { command: string; title: string }[];
+}
+
 function formatDownloads(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
   return String(value);
+}
+
+function renderMarkdown(text?: string, isHtml?: boolean): string {
+  if (!text) return "";
+  const html = isHtml ? text : (marked.parse(text, { async: false }) as string);
+  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
 }
 
 export class ExtensionsView {
@@ -34,6 +52,7 @@ export class ExtensionsView {
   private listEl: HTMLElement;
   private installed: ExtensionInfo[] = [];
   private results: MarketplaceResult | null = null;
+  private detailId: string | null = null;
   private timer: number | undefined;
   private searchSeq = 0;
 
@@ -76,12 +95,21 @@ export class ExtensionsView {
     } catch {
       this.installed = [];
     }
+    if (this.detailId) {
+      await this.openDetail(this.detailId, { keepScroll: true });
+      return;
+    }
     if (this.searchEl.value.trim() && this.results) this.renderMarketplace(this.results);
     else this.renderInstalled();
   }
 
+  private isInstalled(id: string): boolean {
+    return this.installed.some((item) => item.id === id);
+  }
+
   private scheduleSearch(): void {
     window.clearTimeout(this.timer);
+    this.detailId = null;
     if (!this.searchEl.value.trim()) {
       this.results = null;
       this.renderInstalled();
@@ -132,23 +160,198 @@ export class ExtensionsView {
     for (const extension of result.extensions) this.listEl.append(this.marketplaceCard(extension));
   }
 
+  // ---- detail -------------------------------------------------------------
+
+  private async openDetail(id: string, options: { keepScroll?: boolean } = {}): Promise<void> {
+    this.detailId = id;
+    const installed = this.isInstalled(id);
+    if (!options.keepScroll) {
+      this.sectionEl.textContent = "";
+      this.listEl.innerHTML = `<div class="ext-empty">Loading…</div>`;
+    }
+    try {
+      const detail: DetailData = installed
+        ? await bridge.request<DetailData>("ext.detail", { id })
+        : await bridge.request<DetailData>("ext.marketplace.detail", {
+            registry: this.registryEl.value,
+            id,
+          });
+      if (this.detailId !== id) return;
+      this.renderDetail(detail, installed);
+    } catch (error: any) {
+      if (this.detailId !== id) return;
+      this.listEl.innerHTML = `<div class="ext-empty">Failed to load details: ${error?.message}</div>`;
+    }
+  }
+
+  private showList(): void {
+    this.detailId = null;
+    if (this.searchEl.value.trim()) this.runSearch();
+    else this.renderInstalled();
+  }
+
+  private renderDetail(detail: DetailData, installed: boolean): void {
+    this.sectionEl.textContent = "";
+    this.listEl.innerHTML = "";
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "ext-detail";
+
+    const back = document.createElement("button");
+    back.className = "ext-back";
+    back.innerHTML = `${icons.chevronLeft}<span>Back</span>`;
+    back.onclick = () => this.showList();
+    wrapper.append(back);
+
+    const header = document.createElement("div");
+    header.className = "ext-detail-header";
+    header.append(this.iconElement(detail.iconUrl));
+
+    const info = document.createElement("div");
+    info.className = "ext-detail-info";
+
+    const name = document.createElement("h2");
+    name.className = "ext-detail-name";
+    name.textContent = detail.displayName;
+
+    const meta = document.createElement("div");
+    meta.className = "ext-meta";
+    meta.textContent =
+      `${detail.id} · v${detail.version} · ${formatDownloads(detail.downloads)} installs` +
+      `${detail.rating ? ` · ${detail.rating.toFixed(1)}/5` : ""}`;
+
+    const description = document.createElement("div");
+    description.className = "ext-desc";
+    description.textContent = detail.description || "";
+
+    const actions = document.createElement("div");
+    actions.className = "ext-actions";
+    this.buildActions(actions, detail, installed);
+
+    info.append(name, meta, description, actions);
+    header.append(info);
+    wrapper.append(header);
+
+    const tags: string[] = [];
+    if (detail.categories?.length) tags.push(...detail.categories);
+    if (detail.license) tags.push(detail.license);
+    if (tags.length > 0) {
+      const tagRow = document.createElement("div");
+      tagRow.className = "ext-tags";
+      for (const tag of tags) {
+        const chip = document.createElement("span");
+        chip.className = "ext-tag";
+        chip.textContent = tag;
+        tagRow.append(chip);
+      }
+      wrapper.append(tagRow);
+    }
+
+    if (detail.repository) {
+      const repo = document.createElement("a");
+      repo.className = "ext-repo";
+      repo.href = detail.repository;
+      repo.target = "_blank";
+      repo.rel = "noopener noreferrer";
+      repo.textContent = detail.repository;
+      wrapper.append(repo);
+    }
+
+    const readme = document.createElement("div");
+    readme.className = "markdown ext-readme";
+    const html = renderMarkdown(detail.readme, detail.readmeIsHtml);
+    readme.innerHTML = html || `<p class="ext-empty">No README available.</p>`;
+    this.makeLinksExternal(readme);
+    wrapper.append(readme);
+
+    this.listEl.append(wrapper);
+    this.listEl.scrollTop = 0;
+  }
+
+  private buildActions(actions: HTMLElement, detail: DetailData, installed: boolean): void {
+    if (installed) {
+      if (detail.commands?.length) {
+        const run = document.createElement("button");
+        run.className = "ext-btn";
+        run.textContent = `Run command (${detail.commands.length})`;
+        run.onclick = async (event) => {
+          event.stopPropagation();
+          const choice = await showQuickPick(
+            detail.commands!.map((command) => ({
+              label: command.title,
+              description: command.command,
+              command: command.command,
+            }))
+          );
+          if (choice) this.onRunCommand(detail.id, choice.command);
+        };
+        actions.append(run);
+      }
+      const remove = document.createElement("button");
+      remove.className = "ext-btn";
+      remove.textContent = "Uninstall";
+      remove.onclick = async (event) => {
+        event.stopPropagation();
+        remove.disabled = true;
+        try {
+          await bridge.request("ext.uninstall", { id: detail.id });
+        } finally {
+          await this.refresh();
+          this.onChanged?.();
+        }
+      };
+      actions.append(remove);
+      return;
+    }
+
+    const install = document.createElement("button");
+    install.className = "ext-btn primary";
+    install.textContent = "Install";
+    install.onclick = async (event) => {
+      event.stopPropagation();
+      install.disabled = true;
+      install.textContent = "Installing…";
+      try {
+        await bridge.request("ext.marketplace.install", { downloadUrl: detail.downloadUrl });
+        await this.refresh();
+        this.onChanged?.();
+      } catch (error: any) {
+        install.textContent = "Failed";
+        install.title = error?.message || "Install failed";
+      } finally {
+        install.disabled = false;
+      }
+    };
+    actions.append(install);
+  }
+
+  private makeLinksExternal(container: HTMLElement): void {
+    container.querySelectorAll("a").forEach((link) => {
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    });
+  }
+
+  // ---- cards --------------------------------------------------------------
+
   private installedCard(extension: ExtensionInfo): HTMLElement {
     const card = this.card({
       name: extension.displayName,
-      publisher: extension.publisher,
       version: extension.version,
       description: extension.runtime ? "Extension with runtime code" : "Declarative extension",
       meta: `${extension.id} · ${extension.runtime ? "runtime" : "declarative"}${
         extension.active ? " · active" : ""
       }`,
     });
-    const actions = card.querySelector(".ext-actions")!;
+    card.onclick = () => this.openDetail(extension.id);
 
+    const actions = card.querySelector(".ext-actions")!;
     if (extension.commands.length > 0) {
       const run = document.createElement("button");
       run.className = "ext-btn";
       run.textContent = `Run command (${extension.commands.length})`;
-      run.onclick = async () => {
+      run.onclick = async (event) => {
+        event.stopPropagation();
         const choice = await showQuickPick(
           extension.commands.map((command) => ({
             label: command.title,
@@ -164,7 +367,8 @@ export class ExtensionsView {
     const remove = document.createElement("button");
     remove.className = "ext-btn";
     remove.textContent = "Uninstall";
-    remove.onclick = async () => {
+    remove.onclick = async (event) => {
+      event.stopPropagation();
       remove.disabled = true;
       try {
         await bridge.request("ext.uninstall", { id: extension.id });
@@ -178,20 +382,20 @@ export class ExtensionsView {
   }
 
   private marketplaceCard(extension: MarketplaceExtension): HTMLElement {
-    const isInstalled = this.installed.some((item) => item.id === extension.id);
+    const installed = this.isInstalled(extension.id);
     const card = this.card({
       iconUrl: extension.iconUrl,
       name: extension.displayName,
-      publisher: extension.publisher,
       version: extension.version,
       description: extension.description,
       meta: `${extension.id} · ${formatDownloads(extension.downloads)} installs${
         extension.rating ? ` · ${extension.rating.toFixed(1)}/5` : ""
       }`,
     });
-    const actions = card.querySelector(".ext-actions")!;
+    card.onclick = () => this.openDetail(extension.id);
 
-    if (isInstalled) {
+    const actions = card.querySelector(".ext-actions")!;
+    if (installed) {
       const badge = document.createElement("span");
       badge.className = "ext-installed";
       badge.textContent = "Installed";
@@ -202,7 +406,8 @@ export class ExtensionsView {
     const install = document.createElement("button");
     install.className = "ext-btn primary";
     install.textContent = "Install";
-    install.onclick = async () => {
+    install.onclick = async (event) => {
+      event.stopPropagation();
       install.disabled = true;
       install.textContent = "Installing…";
       try {
@@ -223,7 +428,6 @@ export class ExtensionsView {
   private card(opts: {
     iconUrl?: string;
     name: string;
-    publisher?: string;
     version?: string;
     description?: string;
     meta?: string;
@@ -231,23 +435,7 @@ export class ExtensionsView {
     const card = document.createElement("div");
     card.className = "ext-card";
 
-    const icon = document.createElement("div");
-    icon.className = "ext-icon";
-    if (opts.iconUrl) {
-      const img = document.createElement("img");
-      img.src = opts.iconUrl;
-      img.alt = "";
-      img.loading = "lazy";
-      img.onerror = () => {
-        img.remove();
-        icon.innerHTML = icons.extensions;
-        icon.classList.add("fallback");
-      };
-      icon.append(img);
-    } else {
-      icon.innerHTML = icons.extensions;
-      icon.classList.add("fallback");
-    }
+    const icon = this.iconElement(opts.iconUrl);
 
     const body = document.createElement("div");
     body.className = "ext-body";
@@ -271,7 +459,7 @@ export class ExtensionsView {
 
     const meta = document.createElement("div");
     meta.className = "ext-meta";
-    meta.textContent = opts.meta || opts.publisher || "";
+    meta.textContent = opts.meta || "";
 
     const actions = document.createElement("div");
     actions.className = "ext-actions";
@@ -279,5 +467,26 @@ export class ExtensionsView {
     body.append(title, description, meta, actions);
     card.append(icon, body);
     return card;
+  }
+
+  private iconElement(iconUrl?: string): HTMLElement {
+    const icon = document.createElement("div");
+    icon.className = "ext-icon";
+    if (iconUrl) {
+      const img = document.createElement("img");
+      img.src = iconUrl;
+      img.alt = "";
+      img.loading = "lazy";
+      img.onerror = () => {
+        img.remove();
+        icon.innerHTML = icons.extensions;
+        icon.classList.add("fallback");
+      };
+      icon.append(img);
+    } else {
+      icon.innerHTML = icons.extensions;
+      icon.classList.add("fallback");
+    }
+    return icon;
   }
 }

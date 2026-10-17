@@ -89,6 +89,11 @@ registry with the dropdown — **Open VSX** or the **VS Code Marketplace** — t
 press **Install**. Installed entries show a `Run command` button and
 `Uninstall`.
 
+Click any extension to open its **detail page**: icon, publisher, version,
+installs, rating, tags, license, repository link and the README (markdown from
+Open VSX, HTML from the VS Code Marketplace). Installing or uninstalling from
+the detail page keeps it in sync.
+
 You can also use **Extensions: Install from VSIX…** from the command palette
 with a local `.vsix` path or a URL.
 

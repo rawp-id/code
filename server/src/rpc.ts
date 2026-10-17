@@ -5,7 +5,7 @@ import { Workspace } from "./workspace.js";
 import { PtyManager } from "./pty.js";
 import { ExtensionHost, type UiBridge } from "./ext-host/host.js";
 import { installVsix, uninstallExtension } from "./ext-host/installer.js";
-import { searchMarketplace, type Registry } from "./ext-host/marketplace.js";
+import { searchMarketplace, getMarketplaceDetail, type Registry } from "./ext-host/marketplace.js";
 import { LspManager } from "./lsp/manager.js";
 import { searchWorkspace } from "./search.js";
 
@@ -194,6 +194,9 @@ export function handleConnection(ws: WebSocket): void {
       await host.scan();
       return info;
     },
+    "ext.marketplace.detail": ({ registry, id }: any) =>
+      getMarketplaceDetail((registry as Registry) || "open-vsx", String(id || "")),
+    "ext.detail": ({ id }: { id: string }) => host.detail(id),
 
     "lsp.didOpen": ({ uri, languageId, text }: any) => lsp.didOpen(uri, languageId, text),
     "lsp.didChange": ({ uri, text }: any) => lsp.didChange(uri, text),

@@ -632,6 +632,155 @@ body {
   padding: 12px;
 }
 
+.ext-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.ext-back:hover {
+  color: var(--fg);
+}
+
+.ext-back svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ext-detail {
+  padding-bottom: 24px;
+}
+
+.ext-detail-header {
+  display: flex;
+  gap: 12px;
+  padding: 4px 12px 8px;
+}
+
+.ext-detail-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ext-detail-name {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.ext-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 12px;
+}
+
+.ext-tag {
+  background: #3c3c3c;
+  color: var(--fg-dim);
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 11px;
+}
+
+.ext-repo {
+  display: block;
+  padding: 2px 12px 8px;
+  color: var(--accent);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ext-readme {
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  margin: 14px 0 8px;
+}
+
+.markdown h1 {
+  font-size: 1.3em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+
+.markdown h2 {
+  font-size: 1.15em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 3px;
+}
+
+.markdown p {
+  margin: 8px 0;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.markdown code {
+  background: #2d2d2d;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+
+.markdown pre {
+  background: #2d2d2d;
+  padding: 10px;
+  border-radius: 4px;
+  overflow: auto;
+}
+
+.markdown pre code {
+  background: none;
+  padding: 0;
+}
+
+.markdown img {
+  max-width: 100%;
+}
+
+.markdown a {
+  color: var(--accent);
+}
+
+.markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.markdown blockquote {
+  margin: 8px 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  color: var(--fg-dim);
+}
+
 .search-view {
   display: flex;
   flex-direction: column;

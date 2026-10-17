@@ -414,6 +414,38 @@ export class ExtensionHost {
     }
   }
 
+  /** Metadata + README/changelog for an installed extension. */
+  async detail(id: string): Promise<any | null> {
+    if (!this.scanned) await this.scan();
+    const ext = this.extensions.get(id);
+    if (!ext) return null;
+    const manifest = ext.manifest || {};
+    const readme = await readFirst(ext.dir, [
+      "README.md",
+      "readme.md",
+      "Readme.md",
+      "README.markdown",
+      "README.txt",
+    ]);
+    const changelog = await readFirst(ext.dir, [
+      "CHANGELOG.md",
+      "changelog.md",
+      "Changelog.md",
+      "CHANGES.md",
+    ]);
+    return {
+      ...this.list().find((item) => item.id === id),
+      description: manifest.description || "",
+      readme,
+      changelog,
+      readmeIsHtml: false,
+      repository:
+        typeof manifest.repository === "string" ? manifest.repository : manifest.repository?.url,
+      license: manifest.license,
+      categories: manifest.categories,
+    };
+  }
+
   // ---- language providers -------------------------------------------------
 
   async provideCompletionItems(
@@ -853,6 +885,17 @@ function uriFromPath(filePath: string) {
 
 function stringItems(rest: any[]): string[] {
   return rest.filter((r) => typeof r === "string");
+}
+
+async function readFirst(dir: string, names: string[]): Promise<string | undefined> {
+  for (const name of names) {
+    try {
+      return await fs.readFile(path.join(dir, name), "utf8");
+    } catch {
+      /* try next */
+    }
+  }
+  return undefined;
 }
 
 function comparePositions(a: { line: number; character: number }, b: { line: number; character: number }): number {

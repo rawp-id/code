@@ -15,6 +15,7 @@ export const icons = {
   ),
   search: outline(`<circle cx="7.2" cy="7.2" r="4.2"/><path d="M10.4 10.4L14 14"/>`, 22),
   chevronRight: outline(`<path d="M6 3.5L10.5 8 6 12.5"/>`, 14),
+  chevronLeft: outline(`<path d="M10 3.5L5.5 8 10 12.5"/>`, 14),
   chevronDown: outline(`<path d="M3.5 6L8 10.5 12.5 6"/>`, 14),
   folder: outline(`<path d="M1.9 3.6h3.8l1.2 1.5h7.2v7.3H1.9z"/>`),
   folderOpen: outline(

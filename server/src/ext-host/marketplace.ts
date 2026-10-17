@@ -19,6 +19,15 @@ export interface MarketplaceSearchResult {
   total: number;
 }
 
+export interface MarketplaceDetail extends MarketplaceExtension {
+  readme?: string;
+  changelog?: string;
+  readmeIsHtml?: boolean;
+  repository?: string;
+  license?: string;
+  categories?: string[];
+}
+
 const OPEN_VSX = "https://open-vsx.org/api";
 const VS_MARKETPLACE =
   "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery";
@@ -44,7 +53,12 @@ async function searchOpenVsx(
   const response = await fetch(url, { headers: { accept: "application/json" } });
   if (!response.ok) throw new Error(`Open VSX search failed: ${response.status}`);
   const data: any = await response.json();
-  const extensions: MarketplaceExtension[] = (data.extensions || []).map((item: any) => ({
+  const extensions: MarketplaceExtension[] = (data.extensions || []).map(normalizeOpenVsx);
+  return { extensions, total: data.totalSize ?? extensions.length };
+}
+
+function normalizeOpenVsx(item: any): MarketplaceExtension {
+  return {
     id: `${item.namespace}.${item.name}`,
     namespace: item.namespace,
     name: item.name,
@@ -56,27 +70,94 @@ async function searchOpenVsx(
     publisher: item.publisher?.loginName || item.namespace,
     iconUrl: item.files?.icon,
     downloadUrl: item.files?.download,
-  }));
-  return { extensions, total: data.totalSize ?? extensions.length };
+  };
 }
 
-async function searchVsMarketplace(
-  query: string,
-  size: number,
+function repositoryUrl(repository: any): string | undefined {
+  if (!repository) return undefined;
+  return typeof repository === "string" ? repository : repository.url;
+}
+
+/** Extra metadata + README/changelog for a marketplace extension. */
+export async function getMarketplaceDetail(
+  registry: Registry,
+  id: string
+): Promise<MarketplaceDetail> {
+  const dot = id.indexOf(".");
+  const namespace = dot >= 0 ? id.slice(0, dot) : id;
+  const name = dot >= 0 ? id.slice(dot + 1) : "";
+  return registry === "vscode"
+    ? vsDetail(namespace, name)
+    : openVsxDetail(namespace, name);
+}
+
+async function openVsxDetail(namespace: string, name: string): Promise<MarketplaceDetail> {
+  const response = await fetch(`${OPEN_VSX}/${namespace}/${name}`, {
+    headers: { accept: "application/json" },
+  });
+  if (!response.ok) throw new Error(`Open VSX detail failed: ${response.status}`);
+  const data: any = await response.json();
+  const files = data.files || {};
+  const readme = files.readme ? await fetchText(files.readme) : undefined;
+  const changelog = files.changelog ? await fetchText(files.changelog) : undefined;
+  return {
+    ...normalizeOpenVsx(data),
+    readme,
+    changelog,
+    readmeIsHtml: false,
+    repository: repositoryUrl(data.repository),
+    license: data.license,
+    categories: data.categories,
+  };
+}
+
+async function vsDetail(namespace: string, name: string): Promise<MarketplaceDetail> {
+  const data = await queryVsMarketplace(
+    [{ filterType: 7, value: `${namespace}.${name}` }],
+    1,
+    0
+  );
+  const item = data.results?.[0]?.extensions?.[0];
+  if (!item) throw new Error(`Extension not found: ${namespace}.${name}`);
+  const version = item.versions?.[0] ?? {};
+  const files: any[] = version.files || [];
+  const asset = (type: string) => files.find((file) => file.assetType === type)?.source;
+  const readme = asset("Microsoft.VisualStudio.Services.Content.Details");
+  const changelog = asset("Microsoft.VisualStudio.Services.Content.Changelog");
+  return {
+    id: `${item.publisher.publisherName}.${item.extensionName}`,
+    namespace: item.publisher.publisherName,
+    name: item.extensionName,
+    displayName: item.displayName,
+    description: item.shortDescription || "",
+    version: version.version || "",
+    downloads:
+      (item.statistics || []).find((stat: any) => stat.statisticName === "install")?.value ?? 0,
+    rating: item.averageRating ?? 0,
+    publisher: item.publisher.displayName || item.publisher.publisherName,
+    iconUrl: asset("Microsoft.VisualStudio.Services.Icons.Default"),
+    downloadUrl: asset("Microsoft.VisualStudio.Services.VSIXPackage"),
+    readme: readme ? await fetchText(readme) : undefined,
+    changelog: changelog ? await fetchText(changelog) : undefined,
+    readmeIsHtml: true,
+    repository:
+      (item.properties || []).find((prop: any) => prop.key === "Repo")?.value || undefined,
+    license: undefined,
+    categories: item.categories || [],
+  };
+}
+
+async function queryVsMarketplace(
+  criteria: any[],
+  pageSize: number,
   offset: number
-): Promise<MarketplaceSearchResult> {
+): Promise<any> {
   const body = {
     filters: [
-      {
-        criteria: [{ filterType: 10, value: query }],
-        pageNumber: Math.floor(offset / size) + 1,
-        pageSize: size,
-        sortBy: 0,
-        sortOrder: 0,
-      },
+      { criteria, pageNumber: Math.floor(offset / pageSize) + 1, pageSize, sortBy: 0, sortOrder: 0 },
     ],
     assetTypes: [],
-    flags: 914,
+    flags: 951,
   };
   const response = await fetch(VS_MARKETPLACE, {
     method: "POST",
@@ -86,8 +167,27 @@ async function searchVsMarketplace(
     },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error(`VS Code Marketplace search failed: ${response.status}`);
-  const data: any = await response.json();
+  if (!response.ok) throw new Error(`VS Code Marketplace request failed: ${response.status}`);
+  return response.json();
+}
+
+async function fetchText(url: string): Promise<string> {
+  try {
+    const response = await fetch(url, {
+      headers: { accept: "text/plain, text/markdown, text/html, */*" },
+    });
+    return response.ok ? await response.text() : "";
+  } catch {
+    return "";
+  }
+}
+
+async function searchVsMarketplace(
+  query: string,
+  size: number,
+  offset: number
+): Promise<MarketplaceSearchResult> {
+  const data = await queryVsMarketplace([{ filterType: 10, value: query }], size, offset);
   const result = data.results?.[0];
   const extensions: MarketplaceExtension[] = (result?.extensions || []).map((item: any) => {
     const version = item.versions?.[0] ?? {};
