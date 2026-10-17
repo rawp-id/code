@@ -14,6 +14,10 @@ export const icons = {
     22
   ),
   search: outline(`<circle cx="7.2" cy="7.2" r="4.2"/><path d="M10.4 10.4L14 14"/>`, 22),
+  settings: outline(
+    `<circle cx="8" cy="8" r="2.2"/><path d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/>`,
+    22
+  ),
   newFile: outline(
     `<path d="M4 2.6h4l3 3V9"/><path d="M8 2.6v3h3"/><path d="M11.5 9.4v4.6M9.2 11.7h4.6"/>`
   ),

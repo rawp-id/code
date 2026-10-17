@@ -148,6 +148,30 @@ whatever started the server cannot spam errors. Configure it in
 leave the shell's own prompt untouched. `PS2`, `PROMPT_COMMAND`, `BASH_ENV` and
 `ENV` are always stripped from the spawned shell.
 
+## Settings
+
+Open the **Settings** view (gear icon in the activity bar) to configure the
+editor. Changes apply live and are written to `<workspace>/settings.json`.
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| `editor.fontSize` | 14 | |
+| `editor.tabSize` | 2 | |
+| `editor.wordWrap` | `off` | `off` / `on` |
+| `editor.lineNumbers` | `true` | |
+| `editor.highlightActiveLine` | `true` | |
+| `editor.autoSave` | `off` | `off` / `afterDelay` / `onFocusChange` |
+| `editor.autoSaveDelay` | 1000 | milliseconds |
+| `files.exclude` | node_modules, .git, dist, build, vendor, target, … | hidden from the Explorer |
+| `search.exclude` | same defaults | skipped by text search |
+| `search.maxResults` | 1000 | |
+| `terminal.fontSize` | 13 | |
+| `terminal.prompt` | `\u@\h \w \$ ` | PS1 for new terminals |
+| `workbench.sidebarWidth` | 240 | pixels |
+
+The exclude defaults already cover heavy folders for mobile projects
+(`node_modules`, `vendor`, `target`, `.gradle`, `.dart_tool`, `Pods`, …).
+
 ## Language servers
 
 The server ships real language servers and resolves their binaries from

@@ -45,7 +45,8 @@ export interface SearchResult {
 /** Plain recursive text search over the workspace (skips binaries and heavy dirs). */
 export async function searchWorkspace(
   root: string,
-  options: SearchOptions
+  options: SearchOptions,
+  exclude: string[] = []
 ): Promise<SearchResult> {
   const query = String(options.query ?? "");
   if (!query) return { files: [], matchCount: 0, truncated: false };
@@ -61,6 +62,7 @@ export async function searchWorkspace(
   }
 
   const limit = options.maxResults ?? DEFAULT_MAX_MATCHES;
+  const skip = new Set([...IGNORED_DIRS, ...exclude]);
   const files: SearchFileResult[] = [];
   let matchCount = 0;
   let truncated = false;
@@ -80,11 +82,11 @@ export async function searchWorkspace(
       const full = path.join(dir, entry.name);
 
       if (entry.isDirectory()) {
-        if (entry.name.startsWith(".") || IGNORED_DIRS.has(entry.name)) continue;
+        if (entry.name.startsWith(".") || skip.has(entry.name)) continue;
         await walk(full);
         continue;
       }
-      if (!entry.isFile() || IGNORED_DIRS.has(entry.name)) continue;
+      if (!entry.isFile() || skip.has(entry.name)) continue;
 
       let content: Buffer;
       try {

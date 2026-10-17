@@ -9,6 +9,7 @@ import { searchMarketplace, getMarketplaceDetail, type Registry } from "./ext-ho
 import { LspManager } from "./lsp/manager.js";
 import { searchWorkspace } from "./search.js";
 import { listDirectories } from "./browse.js";
+import { readSettings, writeSettings } from "./settings.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(HERE, "..");
@@ -23,6 +24,8 @@ type Pending = {
 
 export function handleConnection(ws: WebSocket): void {
   const workspace = new Workspace(DEFAULT_WORKSPACE);
+  let currentSettings = readSettings(workspace.root);
+  workspace.setExclude(currentSettings.files.exclude);
   const pty = new PtyManager();
   const clientPending = new Map<number, Pending>();
   let clientSeq = 1;
@@ -71,13 +74,9 @@ export function handleConnection(ws: WebSocket): void {
 
   const host = new ExtensionHost(EXTENSIONS_DIR, workspace.root, ui);
 
-  const DEFAULT_PS1 = "\\u@\\h \\w \\$ ";
-  const terminalEnv = async (): Promise<Record<string, string>> => {
-    const settings = await workspace.readSettings();
-    const terminal = (settings.terminal ?? {}) as Record<string, unknown>;
-    if (terminal.prompt === false) return {};
-    const prompt = typeof terminal.prompt === "string" ? terminal.prompt : DEFAULT_PS1;
-    return { PS1: prompt };
+  const terminalEnv = (): Record<string, string> => {
+    const prompt = currentSettings.terminal.prompt;
+    return typeof prompt === "string" ? { PS1: prompt } : {};
   };
 
   const methods: Record<string, (params: any) => any> = {
@@ -96,6 +95,8 @@ export function handleConnection(ws: WebSocket): void {
     "ws.setRoot": async ({ root }: { root: string }) => {
       workspace.root = path.resolve(root);
       host.workspaceRoot = workspace.root;
+      currentSettings = readSettings(workspace.root);
+      workspace.setExclude(currentSettings.files.exclude);
       return workspace.info();
     },
 
@@ -108,7 +109,14 @@ export function handleConnection(ws: WebSocket): void {
     "fs.rename": ({ from, to }: { from: string; to: string }) => workspace.rename(from, to),
     "fs.delete": ({ path: rel }: { path: string }) => workspace.delete(rel),
 
-    "ws.search": (params: any) => searchWorkspace(workspace.root, params),
+    "ws.search": (params: any) =>
+      searchWorkspace(workspace.root, params, currentSettings.search.exclude),
+    "settings.get": () => currentSettings,
+    "settings.update": ({ settings }: { settings: any }) => {
+      currentSettings = writeSettings(workspace.root, settings);
+      workspace.setExclude(currentSettings.files.exclude);
+      return currentSettings;
+    },
     "fs.listDirs": ({ path: dir }: { path?: string }) => listDirectories(dir),
 
     "doc.open": ({ uri, languageId, text }: { uri: string; languageId: string; text: string }) => {
@@ -144,7 +152,7 @@ export function handleConnection(ws: WebSocket): void {
       })),
 
     "pty.spawn": async ({ cols, rows, shell }: { cols: number; rows: number; shell?: string }) => {
-      const env = await terminalEnv();
+      const env = terminalEnv();
       const id = await pty.spawn(
         { cols, rows, shell, cwd: workspace.root, env },
         (ptyId, data) => event("pty.data", { id: ptyId, data }),

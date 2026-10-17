@@ -4,7 +4,7 @@ export interface SessionState {
   active?: string;
   activeCursor?: number;
   expanded: string[];
-  sidebarView: "files" | "search" | "extensions";
+  sidebarView: "files" | "search" | "extensions" | "settings";
   panelVisible: boolean;
   panelView: "terminal" | "output";
   /** Unsaved buffers, keyed by path (size-capped). */

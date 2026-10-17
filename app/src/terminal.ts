@@ -91,6 +91,12 @@ export class TerminalPanel {
     }
   }
 
+  setFontSize(size: number): void {
+    if (!Number.isFinite(size) || size < 6) return;
+    this.term.options.fontSize = size;
+    this.fitNow();
+  }
+
   focus(): void {
     this.term.focus();
   }

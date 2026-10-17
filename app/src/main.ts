@@ -7,6 +7,8 @@ import { TabsView } from "./tabs";
 import { FileTree } from "./sidebar";
 import { ExtensionsView } from "./extensionsview";
 import { SearchView } from "./searchview";
+import { SettingsView } from "./settingsview";
+import type { Settings } from "./settings";
 import { icons } from "./icons";
 import { CommandPalette, showInputBox, showQuickPick, type Command } from "./palette";
 import { initConnectionUi, openConnectionDialog } from "./connect";
@@ -25,9 +27,11 @@ new TabsView(layout.tabs, editor);
 const filesEl = document.createElement("div");
 const searchEl = document.createElement("div");
 const extensionsEl = document.createElement("div");
+const settingsEl = document.createElement("div");
 searchEl.style.display = "none";
 extensionsEl.style.display = "none";
-layout.sideBody.append(filesEl, searchEl, extensionsEl);
+settingsEl.style.display = "none";
+layout.sideBody.append(filesEl, searchEl, extensionsEl, settingsEl);
 
 const filetree = new FileTree(filesEl, (path) => {
   editor.open(path).catch((error: any) => toast("error", `Could not open ${path}: ${error?.message}`));
@@ -44,11 +48,15 @@ const terminal = new TerminalPanel(layout.terminalHost);
 const search = new SearchView(searchEl, (path, line, column) =>
   editor.openAt(path, line, column).catch((error: any) => toast("error", error?.message))
 );
+const settingsView = new SettingsView(settingsEl, (settings) => applySettings(settings));
 
-let activeView: "files" | "search" | "extensions" = "files";
+let activeView: "files" | "search" | "extensions" | "settings" = "files";
 let panelView: "terminal" | "output" = "terminal";
 let workspaceRoot: string | null = null;
 let persistTimer: number | undefined;
+let appSettings: Settings | null = null;
+let autoSaveTimer: number | undefined;
+let lastFilesExclude = "";
 
 function updateActivityBar(): void {
   const hidden = layout.sidebar.classList.contains("hidden");
@@ -59,20 +67,28 @@ function updateActivityBar(): void {
     );
 }
 
-function setSidebarView(view: "files" | "search" | "extensions"): void {
+function setSidebarView(view: "files" | "search" | "extensions" | "settings"): void {
   activeView = view;
   layout.sideTitle.textContent =
-    view === "files" ? "Explorer" : view === "search" ? "Search" : "Extensions";
+    view === "files"
+      ? "Explorer"
+      : view === "search"
+        ? "Search"
+        : view === "settings"
+          ? "Settings"
+          : "Extensions";
   filesEl.style.display = view === "files" ? "" : "none";
   searchEl.style.display = view === "search" ? "" : "none";
   extensionsEl.style.display = view === "extensions" ? "" : "none";
+  settingsEl.style.display = view === "settings" ? "" : "none";
   renderSidebarActions(view);
   if (view === "search") search.focus();
+  if (view === "settings") settingsView.focus();
   updateActivityBar();
   schedulePersist();
 }
 
-function renderSidebarActions(view: "files" | "search" | "extensions"): void {
+function renderSidebarActions(view: "files" | "search" | "extensions" | "settings"): void {
   layout.sideActions.innerHTML = "";
   if (view !== "files") return;
   const make = (icon: string, title: string, run: () => void) => {
@@ -147,6 +163,18 @@ function persistNow(): void {
 function schedulePersist(): void {
   window.clearTimeout(persistTimer);
   persistTimer = window.setTimeout(persistNow, 500);
+}
+
+function applySettings(settings: Settings): void {
+  appSettings = settings;
+  editor.applySettings(settings);
+  layout.sidebar.style.width = `${settings.workbench.sidebarWidth}px`;
+  terminal.setFontSize(settings.terminal.fontSize);
+  const excludeKey = JSON.stringify(settings.files.exclude || []);
+  if (lastFilesExclude && lastFilesExclude !== excludeKey) {
+    void filetree.refresh();
+  }
+  lastFilesExclude = excludeKey;
 }
 
 async function updateExtensionCommands(): Promise<void> {
@@ -278,7 +306,7 @@ palette.setCommands(builtinCommands);
 layout.activityBar.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-view]");
   if (!button || !button.dataset.view) return;
-  const view = button.dataset.view as "files" | "search" | "extensions";
+  const view = button.dataset.view as "files" | "search" | "extensions" | "settings";
   const hidden = layout.sidebar.classList.contains("hidden");
   if (!hidden && activeView === view) {
     toggleSidebar(true);
@@ -327,6 +355,14 @@ bus.on("editor.open", ({ path, languageId, text }) => {
 let changeTimer: number | undefined;
 const pendingChanges = new Map<string, string>();
 bus.on("editor.change", ({ path, text }) => {
+  if (appSettings?.editor.autoSave === "afterDelay") {
+    window.clearTimeout(autoSaveTimer);
+    autoSaveTimer = window.setTimeout(() => {
+      editor.save(path).catch(() => undefined);
+    }, appSettings.editor.autoSaveDelay || 1000);
+  } else {
+    window.clearTimeout(autoSaveTimer);
+  }
   pendingChanges.set(path, text);
   window.clearTimeout(changeTimer);
   changeTimer = window.setTimeout(() => {
@@ -430,7 +466,6 @@ bridge.on("output.line", ({ channel, line }) => {
   layout.outputHost.scrollTop = layout.outputHost.scrollHeight;
 });
 
-bridge.on("lsp.ready", ({ languageId }) => toast("info", `Language server ready for ${languageId}`));
 bridge.on("lsp.exit", ({ languageId, code }) =>
   toast("warning", `Language server for ${languageId} exited (${code})`)
 );
@@ -484,6 +519,7 @@ async function init(): Promise<void> {
   }
 
   await refreshExtensions();
+  await settingsView.refresh();
   schedulePersist();
 }
 

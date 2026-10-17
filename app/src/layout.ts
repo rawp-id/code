@@ -22,6 +22,7 @@ export function createLayout(root: HTMLElement): Layout {
         <button data-view="files" class="active" title="Explorer">${icons.explorer}</button>
         <button data-view="search" title="Search">${icons.search}</button>
         <button data-view="extensions" title="Extensions">${icons.extensions}</button>
+        <button data-view="settings" title="Settings">${icons.settings}</button>
       </div>
       <div class="main">
         <div class="sidebar" data-sidebar>

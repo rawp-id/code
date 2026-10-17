@@ -15,9 +15,14 @@ const IGNORED = new Set(["node_modules", ".git", ".DS_Store"]);
  */
 export class Workspace {
   root: string;
+  exclude = new Set<string>(IGNORED);
 
   constructor(root: string) {
     this.root = path.resolve(root);
+  }
+
+  setExclude(names: string[]): void {
+    this.exclude = new Set([...IGNORED, ...names]);
   }
 
   resolve(rel = ""): string {
@@ -42,7 +47,7 @@ export class Workspace {
     const items = await fs.readdir(dir, { withFileTypes: true });
     const entries: DirEntry[] = [];
     for (const item of items) {
-      if (IGNORED.has(item.name)) continue;
+      if (this.exclude.has(item.name)) continue;
       entries.push({
         name: item.name,
         path: this.rel(path.join(dir, item.name)),

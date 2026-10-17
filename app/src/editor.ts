@@ -1,4 +1,4 @@
-import { EditorState, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
   EditorView,
   keymap,
@@ -57,8 +57,37 @@ const LSP_KIND: Record<number, string> = {
   21: "constant",
 };
 
+const fontCompartment = new Compartment();
+const tabCompartment = new Compartment();
+const wrapCompartment = new Compartment();
+const lineNumbersCompartment = new Compartment();
+const activeLineCompartment = new Compartment();
+
+type EditorPrefs = {
+  fontSize: number;
+  tabSize: number;
+  wordWrap: "off" | "on";
+  lineNumbers: boolean;
+  highlightActiveLine: boolean;
+};
+
+const DEFAULT_PREFS: EditorPrefs = {
+  fontSize: 14,
+  tabSize: 2,
+  wordWrap: "off",
+  lineNumbers: true,
+  highlightActiveLine: true,
+};
+
+const fontSizeTheme = (size: number): Extension =>
+  EditorView.theme({
+    ".cm-content": { fontSize: `${size}px` },
+    ".cm-gutters": { fontSize: `${Math.max(size - 1, 9)}px` },
+  });
+
 export class EditorManager {
   readonly view: EditorView;
+  private prefs: EditorPrefs = { ...DEFAULT_PREFS };
   private docs = new Map<string, OpenDoc>();
   private listeners = new Set<() => void>();
   private diagnostics: { lsp: Map<string, any[]>; ext: Map<string, any[]> } = {
@@ -104,9 +133,14 @@ export class EditorManager {
   private createState(path: string, content: string): EditorState {
     const spec = languageFor(path);
     const extensions: Extension[] = [
-      lineNumbers(),
-      highlightActiveLineGutter(),
       highlightSpecialChars(),
+      lineNumbersCompartment.of(
+        this.prefs.lineNumbers ? [lineNumbers(), highlightActiveLineGutter()] : []
+      ),
+      activeLineCompartment.of(this.prefs.highlightActiveLine ? highlightActiveLine() : []),
+      fontCompartment.of(fontSizeTheme(this.prefs.fontSize)),
+      tabCompartment.of(EditorState.tabSize.of(this.prefs.tabSize)),
+      wrapCompartment.of(this.prefs.wordWrap === "on" ? EditorView.lineWrapping : []),
       history(),
       foldGutter(),
       drawSelection(),
@@ -118,7 +152,6 @@ export class EditorManager {
       autocompletion({ override: [(context) => this.complete(path, context)] }),
       rectangularSelection(),
       crosshairCursor(),
-      highlightActiveLine(),
       highlightSelectionMatches(),
       lintGutter(),
       this.hoverTooltip(),
@@ -210,6 +243,36 @@ export class EditorManager {
 
   closeAll(): void {
     for (const path of [...this.docs.keys()]) this.close(path);
+  }
+
+  /** Apply editor-related settings live to every open document. */
+  applySettings(settings: any): void {
+    this.prefs = {
+      fontSize: settings?.editor?.fontSize ?? DEFAULT_PREFS.fontSize,
+      tabSize: settings?.editor?.tabSize ?? DEFAULT_PREFS.tabSize,
+      wordWrap: settings?.editor?.wordWrap === "on" ? "on" : "off",
+      lineNumbers: settings?.editor?.lineNumbers !== false,
+      highlightActiveLine: settings?.editor?.highlightActiveLine !== false,
+    };
+    const effects = [
+      fontCompartment.reconfigure(fontSizeTheme(this.prefs.fontSize)),
+      tabCompartment.reconfigure(EditorState.tabSize.of(this.prefs.tabSize)),
+      wrapCompartment.reconfigure(
+        this.prefs.wordWrap === "on" ? EditorView.lineWrapping : []
+      ),
+      lineNumbersCompartment.reconfigure(
+        this.prefs.lineNumbers ? [lineNumbers(), highlightActiveLineGutter()] : []
+      ),
+      activeLineCompartment.reconfigure(
+        this.prefs.highlightActiveLine ? highlightActiveLine() : []
+      ),
+    ];
+    for (const doc of this.docs.values()) {
+      doc.state = doc.state.update({ effects }).state;
+    }
+    const active = this.active ? this.docs.get(this.active) : undefined;
+    if (active) this.view.setState(active.state);
+    this.fire();
   }
 
   async save(path?: string): Promise<void> {
