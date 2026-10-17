@@ -14,6 +14,7 @@ import catppuccinMocha from "@shikijs/themes/catppuccin-mocha";
 import tokyoNight from "@shikijs/themes/tokyo-night";
 import { StateEffect, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from "@codemirror/view";
+import { applyWorkbenchTheme, isDarkTheme } from "./theme";
 
 export const SHIKI_THEMES: Record<string, { label: string; theme: any }> = {
   "dark-plus": { label: "Dark+ (VS Code)", theme: darkPlus },
@@ -52,40 +53,65 @@ export const refreshHighlighting = StateEffect.define<null>();
 
 export function setShikiTheme(name: string): string {
   currentTheme = themeRegistry.has(name) ? name : DEFAULT_THEME;
+  applyWorkbenchTheme(getTheme(currentTheme));
   return currentTheme;
 }
 
-function themeColors(name: string): { fg: string; bg: string } {
-  const theme = getTheme(name);
+function themeColors(name: string): {
+  fg: string;
+  bg: string;
+  selection: string;
+  lineHighlight: string;
+  gutter: string;
+  gutterActive: string;
+  selectionMatch: string;
+  bracket: string;
+  bracketBorder: string;
+  dark: boolean;
+} {
+  const theme: any = getTheme(name);
   const colors = theme.colors ?? {};
+  const fg = theme.fg || colors["editor.foreground"] || "#d4d4d4";
+  const bg = theme.bg || colors["editor.background"] || "#1e1e1e";
+  const dark = isDarkTheme(theme);
+  const overlay = dark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)";
   return {
-    fg: theme.fg || colors["editor.foreground"] || "#d4d4d4",
-    bg: theme.bg || colors["editor.background"] || "#1e1e1e",
+    fg,
+    bg,
+    dark,
+    selection: colors["editor.selectionBackground"] || (dark ? "#264f78" : "#add6ff"),
+    lineHighlight: colors["editor.lineHighlightBackground"] || overlay,
+    gutter: colors["editorLineNumber.foreground"] || (dark ? "#858585" : "#237893"),
+    gutterActive: colors["editorLineNumber.activeForeground"] || (dark ? "#c6c6c6" : "#0b216f"),
+    selectionMatch:
+      colors["editor.selectionHighlightBackground"] || (dark ? "#3a3d41" : "#e5ebf1"),
+    bracket: colors["editorBracketMatch.background"] || (dark ? "#3a3d41" : "#e5ebf1"),
+    bracketBorder: colors["editorBracketMatch.border"] || (dark ? "#888888" : "#b9b9b9"),
   };
 }
 
 /** Base editor theme derived from the selected Shiki theme. */
 export function editorBaseTheme(name: string): Extension {
-  const { fg, bg } = themeColors(name);
+  const c = themeColors(name);
   return EditorView.theme(
     {
-      "&": { color: fg, backgroundColor: bg },
-      ".cm-content": { caretColor: fg },
-      ".cm-cursor, .cm-dropCursor": { borderLeftColor: fg },
+      "&": { color: c.fg, backgroundColor: c.bg },
+      ".cm-content": { caretColor: c.fg },
+      ".cm-cursor, .cm-dropCursor": { borderLeftColor: c.fg },
       "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
-        backgroundColor: "#264f78",
+        backgroundColor: c.selection,
       },
-      ".cm-gutters": { backgroundColor: bg, color: "#858585", border: "none" },
-      ".cm-activeLine": { backgroundColor: "rgba(255, 255, 255, 0.04)" },
-      ".cm-activeLineGutter": { backgroundColor: "rgba(255, 255, 255, 0.05)", color: "#c6c6c6" },
+      ".cm-gutters": { backgroundColor: c.bg, color: c.gutter, border: "none" },
+      ".cm-activeLine": { backgroundColor: c.lineHighlight },
+      ".cm-activeLineGutter": { backgroundColor: c.lineHighlight, color: c.gutterActive },
       ".cm-lineNumbers .cm-gutterElement": { padding: "0 12px 0 6px" },
-      ".cm-selectionMatch": { backgroundColor: "#3a3d41" },
+      ".cm-selectionMatch": { backgroundColor: c.selectionMatch },
       ".cm-matchingBracket, .cm-nonmatchingBracket": {
-        backgroundColor: "#3a3d41",
-        outline: "1px solid #888",
+        backgroundColor: c.bracket,
+        outline: `1px solid ${c.bracketBorder}`,
       },
     },
-    { dark: true }
+    { dark: c.dark }
   );
 }
 

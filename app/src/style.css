@@ -16,6 +16,8 @@
   --status-fg: #ffffff;
   --error: #f14c4c;
   --warning: #cca700;
+  --input-bg: #3c3c3c;
+  --widget-bg: #252526;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, "Courier New", monospace;
 }
@@ -237,7 +239,7 @@ body {
 }
 
 .tree-row-action:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--hover);
   color: var(--fg);
 }
 
@@ -257,7 +259,7 @@ body {
   z-index: 80;
   min-width: 140px;
   padding: 4px 0;
-  background: #252526;
+  background: var(--widget-bg);
   border: 1px solid var(--border);
   border-radius: 4px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
@@ -548,7 +550,7 @@ body {
 .terminal-host {
   height: 100%;
   padding: 4px 6px;
-  background: #1e1e1e;
+  background: var(--bg);
 }
 
 .output-host {
@@ -584,7 +586,7 @@ body {
 
 .palette input {
   width: 100%;
-  background: #3c3c3c;
+  background: var(--input-bg);
   border: none;
   outline: none;
   color: var(--fg);
@@ -626,7 +628,7 @@ body {
 }
 
 .toast {
-  background: #3c3c3c;
+  background: var(--input-bg);
   border-left: 3px solid var(--accent);
   padding: 10px 12px;
   border-radius: 4px;
@@ -669,7 +671,7 @@ body {
 .ext-search input[type="text"] {
   flex: 1;
   min-width: 0;
-  background: #3c3c3c;
+  background: var(--input-bg);
   border: 1px solid transparent;
   border-radius: 3px;
   color: var(--fg);
@@ -683,7 +685,7 @@ body {
 }
 
 .ext-search select {
-  background: #3c3c3c;
+  background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
@@ -698,7 +700,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #3c3c3c;
+  background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg-dim);
@@ -754,7 +756,7 @@ body {
 .ext-filters select {
   flex: 1;
   min-width: 0;
-  background: #3c3c3c;
+  background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
@@ -764,7 +766,7 @@ body {
 }
 
 .ext-chip {
-  background: #3c3c3c;
+  background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--fg-dim);
@@ -806,7 +808,7 @@ body {
   height: 40px;
   border-radius: 6px;
   overflow: hidden;
-  background: #2d2d2d;
+  background: var(--bg-tab);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -875,7 +877,7 @@ body {
 }
 
 .ext-btn {
-  background: #3c3c3c;
+  background: var(--input-bg);
   color: var(--fg);
   border: 1px solid var(--border);
   border-radius: 3px;
@@ -960,7 +962,7 @@ body {
 }
 
 .ext-tag {
-  background: #3c3c3c;
+  background: var(--input-bg);
   color: var(--fg-dim);
   border-radius: 10px;
   padding: 1px 8px;
@@ -1012,7 +1014,7 @@ body {
 }
 
 .markdown code {
-  background: #2d2d2d;
+  background: var(--bg-tab);
   padding: 1px 4px;
   border-radius: 3px;
   font-family: var(--mono);
@@ -1020,7 +1022,7 @@ body {
 }
 
 .markdown pre {
-  background: #2d2d2d;
+  background: var(--bg-tab);
   padding: 10px;
   border-radius: 4px;
   overflow: auto;
@@ -1076,7 +1078,7 @@ body {
 .search-inputs input[type="text"] {
   flex: 1 1 auto;
   min-width: 0;
-  background: #3c3c3c;
+  background: var(--input-bg);
   border: 1px solid transparent;
   border-radius: 3px;
   color: var(--fg);
@@ -1119,7 +1121,7 @@ body {
 }
 
 .search-flag.active {
-  background: #3c3c3c;
+  background: var(--input-bg);
   border-color: var(--accent);
   color: #ffffff;
 }
@@ -1195,7 +1197,7 @@ body {
 .search-file-count {
   flex: 0 0 auto;
   color: var(--fg-dim);
-  background: #3c3c3c;
+  background: var(--input-bg);
   border-radius: 9px;
   padding: 0 7px;
   font-size: 11px;
@@ -1237,7 +1239,7 @@ body {
 }
 
 .cm-tooltip {
-  background: #252526;
+  background: var(--widget-bg);
   border: 1px solid var(--border);
   color: var(--fg);
 }
@@ -1282,7 +1284,7 @@ body {
 }
 
 .connect-hint code {
-  background: #3c3c3c;
+  background: var(--input-bg);
   padding: 1px 4px;
   border-radius: 3px;
 }
@@ -1306,7 +1308,7 @@ body {
 }
 
 .connect-actions button {
-  background: #3c3c3c;
+  background: var(--input-bg);
   color: var(--fg);
   border: 1px solid var(--border);
   padding: 4px 12px;
@@ -1335,7 +1337,7 @@ body {
 .folder-path input {
   flex: 1;
   min-width: 0;
-  background: #3c3c3c;
+  background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
@@ -1350,7 +1352,7 @@ body {
 
 .folder-path button {
   width: 32px;
-  background: #3c3c3c;
+  background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
@@ -1406,7 +1408,7 @@ body {
 }
 
 .folder-actions button {
-  background: #3c3c3c;
+  background: var(--input-bg);
   color: var(--fg);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -1433,7 +1435,7 @@ body {
 
 .settings-search input {
   width: 100%;
-  background: #3c3c3c;
+  background: var(--input-bg);
   border: 1px solid transparent;
   border-radius: 3px;
   color: var(--fg);
@@ -1493,7 +1495,7 @@ body {
 .setting-control select,
 .setting-control textarea {
   width: 100%;
-  background: #3c3c3c;
+  background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
@@ -1633,7 +1635,7 @@ body {
 .settings-code {
   margin: 0 12px 12px;
   padding: 10px;
-  background: #2d2d2d;
+  background: var(--bg-tab);
   border-radius: 4px;
   font-family: var(--mono);
   font-size: 11px;
