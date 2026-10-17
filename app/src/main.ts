@@ -85,7 +85,8 @@ function renderStatus(): void {
 
   if (serverInfo) {
     add(serverInfo.workspace.name, serverInfo.workspace.root);
-    add(serverInfo.pty ? "tty" : "no-tty", serverInfo.pty ? "node-pty active" : "fallback shell (no pty)");
+    const mode = serverInfo.ptyMode || (serverInfo.pty ? "pty" : "pipe");
+    add(mode, mode === "pipe" ? "fallback shell (no echo)" : `terminal pty: ${mode}`);
   } else {
     add("connecting…");
   }

@@ -45,6 +45,7 @@ async function main() {
   await addTree(zip, path.join(SERVER, "extensions"), "extensions");
   await addTree(zip, path.join(SERVER, "workspace"), "workspace");
   zip.addFile("lsp.config.json", await fs.readFile(path.join(SERVER, "lsp.config.json")));
+  zip.addFile("pty-helper.py", await fs.readFile(path.join(SERVER, "pty-helper.py")));
 
   zip.addFile(
     "package.json",

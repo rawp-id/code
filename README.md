@@ -14,8 +14,8 @@ server/   Node process: workspace FS, terminal (pty), extension host, LSP
 - File explorer, tabs, save (`Ctrl+S`), dirty indicators, status bar.
 - Syntax highlighting for JS/TS, JSON, HTML, CSS, Markdown, Python.
 - Command palette (`Ctrl+Shift+P`) with built-in and extension commands.
-- Integrated terminal (`Ctrl+`` `) backed by a pty (Node `child_process`
-  fallback when `node-pty` cannot build).
+- Integrated terminal (`Ctrl+`` `) rendered with **xterm.js**, backed by a pty
+  (`node-pty`, or a bundled Python pty bridge when it cannot build).
 - **Extension host** that loads CommonJS VS Code extensions and serves a
   `vscode` API shim with a real text document model, text edits, workspace
   edits, events, and on-demand activation.
@@ -90,10 +90,16 @@ relying on unimplemented APIs load but may throw when those APIs are used.
 
 ## Terminal
 
-`PtyManager` uses `node-pty` when it is available. When it is not (no native
-build), it falls back to a plain `child_process` shell: output works, but there
-is no echo and no job control. On Android the plan is a native JNI `forkpty`
-behind the same interface.
+The panel is **xterm.js** (`@xterm/xterm`); open it with `Ctrl+`` ` or **View:
+Toggle Terminal**. `PtyManager` picks a backend automatically:
+
+1. `node-pty` — real pty with resize support.
+2. `server/pty-helper.py` — a Python pty bridge (real prompt, echo, colors), used
+   when `node-pty` cannot build. Needs `python3` on the server.
+3. a plain `child_process` shell — output only, no echo.
+
+The status bar shows the active mode. On Android, run the server inside
+Termux/proot (which ships a real pty) or use a future JNI `forkpty` plugin.
 
 ## Language servers
 

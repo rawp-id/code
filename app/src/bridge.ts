@@ -18,6 +18,7 @@ export interface ExtensionInfo {
 export interface ServerInfo {
   workspace: { root: string; name: string };
   pty: boolean;
+  ptyMode?: "node-pty" | "python" | "pipe";
   node: string;
   platform: string;
 }

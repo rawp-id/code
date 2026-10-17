@@ -69,12 +69,16 @@ export function handleConnection(ws: WebSocket): void {
   const host = new ExtensionHost(EXTENSIONS_DIR, workspace.root, ui);
 
   const methods: Record<string, (params: any) => any> = {
-    "server.info": async () => ({
-      workspace: await workspace.info(),
-      pty: pty.ptyAvailable,
-      node: process.version,
-      platform: process.platform,
-    }),
+    "server.info": async () => {
+      await pty.probe();
+      return {
+        workspace: await workspace.info(),
+        pty: pty.ptyAvailable,
+        ptyMode: pty.mode,
+        node: process.version,
+        platform: process.platform,
+      };
+    },
 
     "ws.info": () => workspace.info(),
     "ws.setRoot": async ({ root }: { root: string }) => {
