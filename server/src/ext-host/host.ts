@@ -409,7 +409,8 @@ export class ExtensionHost {
   }
 
   /** Theme and icon-theme contributions from installed extensions. */
-  listThemes(): { id: string; label: string; extensionId: string; path: string }[] {
+  async listThemes(): Promise<{ id: string; label: string; extensionId: string; path: string }[]> {
+    if (!this.scanned) await this.scan();
     const out: { id: string; label: string; extensionId: string; path: string }[] = [];
     for (const ext of this.extensions.values()) {
       for (const theme of ext.manifest?.contributes?.themes || []) {
@@ -425,7 +426,10 @@ export class ExtensionHost {
     return out;
   }
 
-  listIconThemes(): { id: string; label: string; extensionId: string; path: string }[] {
+  async listIconThemes(): Promise<
+    { id: string; label: string; extensionId: string; path: string }[]
+  > {
+    if (!this.scanned) await this.scan();
     const out: { id: string; label: string; extensionId: string; path: string }[] = [];
     for (const ext of this.extensions.values()) {
       for (const theme of ext.manifest?.contributes?.iconThemes || []) {
@@ -442,6 +446,7 @@ export class ExtensionHost {
   }
 
   async readTheme(extensionId: string, themePath: string): Promise<any> {
+    if (!this.scanned) await this.scan();
     const ext = this.extensions.get(extensionId);
     if (!ext) throw new Error("Unknown extension");
     const file = path.resolve(ext.dir, themePath);
@@ -450,6 +455,7 @@ export class ExtensionHost {
   }
 
   async readIconTheme(extensionId: string, themePath: string): Promise<any> {
+    if (!this.scanned) await this.scan();
     const ext = this.extensions.get(extensionId);
     if (!ext) throw new Error("Unknown extension");
     const file = path.resolve(ext.dir, themePath);
@@ -824,6 +830,32 @@ export class ExtensionHost {
           };
         },
         match: () => 0,
+      },
+      extensions: {
+        getExtension: (id: string) => {
+          const extension = host.extensions.get(id);
+          if (!extension) return undefined;
+          return {
+            id: extension.id,
+            extensionPath: extension.dir,
+            extensionUri: uriFromPath(extension.dir),
+            packageJSON: extension.manifest,
+            isActive: host.activated.has(id),
+            exports: host.activatedExports.get(id),
+            extensionKind: 1,
+            activate: () => host.activate(id),
+          };
+        },
+        get all() {
+          return [...host.extensions.values()].map((extension) => ({
+            id: extension.id,
+            extensionPath: extension.dir,
+            extensionUri: uriFromPath(extension.dir),
+            packageJSON: extension.manifest,
+            isActive: host.activated.has(extension.id),
+          }));
+        },
+        onDidChange: () => ({ dispose() {} }),
       },
       env: {
         appName: "Kode",

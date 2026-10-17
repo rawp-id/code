@@ -42,7 +42,10 @@ const filetree = new FileTree(filesEl, (path) => {
 const extensionsView = new ExtensionsView(
   extensionsEl,
   (extensionId, command) => runExtensionCommand(extensionId, command),
-  () => updateExtensionCommands()
+  () => {
+    void updateExtensionCommands();
+    void settingsView.reloadExtensionThemes();
+  }
 );
 
 const palette = new CommandPalette();

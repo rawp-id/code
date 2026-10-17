@@ -224,6 +224,22 @@ export class SettingsView {
     this.onChange?.(this.settings);
   }
 
+  async reloadExtensionThemes(): Promise<void> {
+    try {
+      this.extensionThemes = await bridge.request("ext.themes");
+    } catch {
+      this.extensionThemes = [];
+    }
+    try {
+      this.extensionIconThemes = await bridge.request("ext.iconThemes");
+    } catch {
+      this.extensionIconThemes = [];
+    }
+    await this.ensureThemeData();
+    await this.ensureIconThemeData();
+    this.render();
+  }
+
   private optionsFor(def: SettingDef): { label: string; value: string }[] {
     if (def.id === "editor.colorTheme") {
       return [
