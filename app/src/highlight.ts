@@ -1,11 +1,36 @@
 import { createHighlighterCore, type HighlighterCore } from "shiki/core";
 import { createOnigurumaEngine } from "shiki/engine/oniguruma";
 import wasm from "shiki/wasm";
-import oneDarkPro from "@shikijs/themes/one-dark-pro";
+import shikiTheme from "@shikijs/themes/dark-plus";
 import type { Extension } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 
-const THEME = "one-dark-pro";
+const THEME = "dark-plus";
+const THEME_COLORS = (shikiTheme as any).colors ?? {};
+const FG = (shikiTheme as any).fg || THEME_COLORS["editor.foreground"] || "#d4d4d4";
+const BG = (shikiTheme as any).bg || THEME_COLORS["editor.background"] || "#1e1e1e";
+
+/** Base editor theme derived from the Shiki theme, so everything matches VS Code. */
+export const shikiEditorTheme: Extension = EditorView.theme(
+  {
+    "&": { color: FG, backgroundColor: BG },
+    ".cm-content": { caretColor: FG },
+    ".cm-cursor, .cm-dropCursor": { borderLeftColor: FG },
+    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+      backgroundColor: "#264f78",
+    },
+    ".cm-gutters": { backgroundColor: BG, color: "#858585", border: "none" },
+    ".cm-activeLine": { backgroundColor: "rgba(255, 255, 255, 0.04)" },
+    ".cm-activeLineGutter": { backgroundColor: "rgba(255, 255, 255, 0.05)", color: "#c6c6c6" },
+    ".cm-lineNumbers .cm-gutterElement": { padding: "0 12px 0 6px" },
+    ".cm-selectionMatch": { backgroundColor: "#3a3d41" },
+    ".cm-matchingBracket, .cm-nonmatchingBracket": {
+      backgroundColor: "#3a3d41",
+      outline: "1px solid #888",
+    },
+  },
+  { dark: true }
+);
 /**
  * TextMate grammars are loaded lazily so the bundle only carries the languages
  * that are actually opened. Add a line here to support another language.
@@ -50,7 +75,7 @@ const loaded = new Set<string>();
 function getCore(): Promise<HighlighterCore> {
   if (!corePromise) {
     corePromise = createHighlighterCore({
-      themes: [oneDarkPro],
+      themes: [shikiTheme],
       langs: [],
       engine: createOnigurumaEngine(wasm),
     });

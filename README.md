@@ -17,10 +17,12 @@ server/   Node process: workspace FS, terminal (pty), extension host, LSP
   that lists the server's directories (with `~` / parent navigation) and also
   accepts a typed path.
 - Tabs, save (`Ctrl+S`), dirty indicators.
-- **TextMate syntax highlighting** via **Shiki** (the same engine VS Code uses)
-  with ~30 languages loaded on demand: JS/TS/JSX/TSX, JSON, HTML, Vue, Svelte,
-  CSS/SCSS/Sass/Less, Markdown, Python, Rust, Go, Java, Kotlin, C/C++, C#, PHP,
-  Ruby, Shell, YAML, TOML, SQL, XML, INI, Diff, Dockerfile, Makefile.
+- **TextMate syntax highlighting** via **Shiki** (the same engine VS Code uses),
+  using VS Code's default **Dark+** theme, with ~30 languages loaded on demand:
+  JS/TS/JSX/TSX, JSON, HTML, Vue, Svelte, CSS/SCSS/Sass/Less, Markdown, Python,
+  Rust, Go, Java, Kotlin, C/C++, C#, PHP, Ruby, Shell, YAML, TOML, SQL, XML, INI,
+  Diff, Dockerfile, Makefile. The editor background/foreground is derived from
+  the same theme so it matches exactly.
 - **CodeMirror language support** (bracket matching, indentation, folding) for
   JS/TS, JSON, HTML, CSS/SCSS/Sass/Less, Markdown, Python, Rust, Go, C/C++, Java,
   PHP, XML and SQL — on top of the Shiki colours.

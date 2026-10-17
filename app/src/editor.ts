@@ -18,8 +18,6 @@ import {
   bracketMatching,
   foldGutter,
   foldKeymap,
-  syntaxHighlighting,
-  defaultHighlightStyle,
 } from "@codemirror/language";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import {
@@ -32,11 +30,10 @@ import {
   type CompletionContext,
 } from "@codemirror/autocomplete";
 import { setDiagnostics, lintGutter, lintKeymap, type Diagnostic } from "@codemirror/lint";
-import { oneDarkTheme } from "@codemirror/theme-one-dark";
 import { bridge } from "./bridge";
 import { bus } from "./bus";
 import { languageFor } from "./lang";
-import { shikiHighlighting } from "./highlight";
+import { shikiHighlighting, shikiEditorTheme } from "./highlight";
 
 export interface OpenDoc {
   path: string;
@@ -100,7 +97,7 @@ export class EditorManager {
   private emptyState(): EditorState {
     return EditorState.create({
       doc: "",
-      extensions: [EditorView.editable.of(false), oneDarkTheme],
+      extensions: [EditorView.editable.of(false), shikiEditorTheme],
     });
   }
 
@@ -116,7 +113,6 @@ export class EditorManager {
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),
       indentOnInput(),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       bracketMatching(),
       closeBrackets(),
       autocompletion({ override: [(context) => this.complete(path, context)] }),
@@ -126,7 +122,7 @@ export class EditorManager {
       highlightSelectionMatches(),
       lintGutter(),
       this.hoverTooltip(),
-      oneDarkTheme,
+      shikiEditorTheme,
       shikiHighlighting(spec.shiki),
       ...spec.extensions,
       keymap.of([
