@@ -100,6 +100,7 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar.hidden {
@@ -150,7 +151,9 @@ body {
 
 .sidebar .sidebar-body {
   flex: 1;
+  min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding-bottom: 12px;
 }
 
@@ -300,12 +303,23 @@ body {
   display: flex;
   background: var(--bg-tab);
   overflow-x: auto;
-  scrollbar-width: none;
+  overflow-y: hidden;
   min-height: 35px;
+  scrollbar-width: thin;
+  scrollbar-color: #5a5a5a transparent;
 }
 
 .tabs::-webkit-scrollbar {
-  display: none;
+  height: 5px;
+}
+
+.tabs::-webkit-scrollbar-thumb {
+  background: #5a5a5a;
+  border-radius: 3px;
+}
+
+.tabs::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .tab {
