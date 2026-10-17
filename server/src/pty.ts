@@ -52,6 +52,22 @@ function defaultShell(): string {
   return process.platform === "win32" ? "powershell.exe" : "bash";
 }
 
+/**
+ * Build the environment for the interactive shell. A stale prompt or startup
+ * hook inherited from whatever launched the server (PS1/PROMPT_COMMAND/...) can
+ * print errors on every prompt, so we drop them and let the shell's own config
+ * define its prompt.
+ */
+function shellEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, TERM: "xterm-256color" };
+  delete env.PS1;
+  delete env.PS2;
+  delete env.PROMPT_COMMAND;
+  delete env.BASH_ENV;
+  delete env.ENV;
+  return env;
+}
+
 export class PtyManager {
   private sessions = new Map<string, Session>();
   mode: PtyMode = "pipe";
@@ -78,7 +94,7 @@ export class PtyManager {
     const cwd = opts.cwd || process.cwd();
     const cols = opts.cols || 80;
     const rows = opts.rows || 24;
-    const env = { ...process.env, TERM: "xterm-256color" };
+    const env = shellEnv();
 
     const pty = await loadPty();
     if (pty) {
