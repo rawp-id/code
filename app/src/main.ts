@@ -461,14 +461,18 @@ async function init(): Promise<void> {
     togglePanel(Boolean(session.panelVisible));
     for (const path of session.openDocs) {
       try {
-        await editor.open(path, session.drafts?.[path]);
+        await editor.open(path, session.drafts?.[path], { activate: false });
       } catch {
         /* the file may have been renamed or deleted */
       }
     }
-    if (session.active && editor.get(session.active)) editor.activate(session.active);
-    if (session.active && session.activeCursor !== undefined && editor.get(session.active)) {
-      editor.setCursorOffset(session.active, session.activeCursor);
+    const target =
+      session.active && editor.get(session.active) ? session.active : editor.openDocs[0]?.path;
+    if (target) {
+      editor.activate(target);
+      if (session.activeCursor !== undefined) {
+        editor.setCursorOffset(target, session.activeCursor);
+      }
     }
   } else {
     await filetree.refresh();

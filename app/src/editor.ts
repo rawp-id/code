@@ -157,9 +157,10 @@ export class EditorManager {
     }
   }
 
-  async open(path: string, draft?: string): Promise<void> {
+  async open(path: string, draft?: string, options: { activate?: boolean } = {}): Promise<void> {
+    const activate = options.activate !== false;
     if (this.docs.has(path)) {
-      this.activate(path);
+      if (activate) this.activate(path);
       return;
     }
     const savedContent = await bridge.request<string>("fs.readFile", { path });
@@ -173,7 +174,7 @@ export class EditorManager {
       state: this.createState(path, hasDraft ? draft! : savedContent),
     };
     this.docs.set(path, doc);
-    this.activate(path);
+    if (activate) this.activate(path);
     bus.emit("editor.open", {
       path,
       languageId: spec.languageId,
