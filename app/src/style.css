@@ -53,7 +53,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: 8px;
+  padding: 8px 0;
   gap: 4px;
 }
 
@@ -74,6 +74,11 @@ body {
 .activitybar button svg {
   width: 22px;
   height: 22px;
+}
+
+/* Settings lives at the bottom, like VS Code. */
+.activitybar button[data-view="settings"] {
+  margin-top: auto;
 }
 
 .activitybar button.active {
