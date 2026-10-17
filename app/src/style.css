@@ -206,13 +206,22 @@ body {
 
 .tree-row-actions {
   display: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 6px;
+  align-items: center;
   gap: 2px;
-  margin-left: auto;
-  flex: 0 0 auto;
+  padding-left: 16px;
+  background: linear-gradient(90deg, transparent 0, var(--hover) 12px);
 }
 
 .tree-row:hover .tree-row-actions {
-  display: inline-flex;
+  display: flex;
+}
+
+.tree-row.active .tree-row-actions {
+  background: linear-gradient(90deg, transparent 0, var(--selected) 12px);
 }
 
 .tree-row-action {
@@ -275,10 +284,12 @@ body {
 }
 
 .tree-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 3px 8px;
+  min-height: 22px;
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
