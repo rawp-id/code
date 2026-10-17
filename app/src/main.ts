@@ -9,7 +9,7 @@ import { ExtensionsView } from "./extensionsview";
 import { SearchView } from "./searchview";
 import { SettingsView } from "./settingsview";
 import type { Settings } from "./settings";
-import { icons } from "./icons";
+import { icons, setIconTheme } from "./icons";
 import { CommandPalette, showInputBox, showQuickPick, type Command } from "./palette";
 import { initConnectionUi, openConnectionDialog } from "./connect";
 import { isNativePlatform, KodeServer } from "./native";
@@ -75,6 +75,7 @@ let persistTimer: number | undefined;
 let appSettings: Settings | null = null;
 let autoSaveTimer: number | undefined;
 let lastFilesExclude = "";
+let lastIconTheme = "";
 
 function updateActivityBar(): void {
   const hidden = layout.sidebar.classList.contains("hidden");
@@ -188,6 +189,14 @@ function applySettings(settings: Settings): void {
   editor.applySettings(settings);
   layout.sidebar.style.width = `${settings.workbench.sidebarWidth}px`;
   terminal.setFontSize(settings.terminal.fontSize);
+
+  const iconTheme = settings.workbench.iconTheme || "default";
+  setIconTheme(iconTheme);
+  if (lastIconTheme && lastIconTheme !== iconTheme) {
+    void filetree.refresh();
+  }
+  lastIconTheme = iconTheme;
+
   const excludeKey = JSON.stringify(settings.files.exclude || []);
   if (lastFilesExclude && lastFilesExclude !== excludeKey) {
     void filetree.refresh();
@@ -504,6 +513,8 @@ async function init(): Promise<void> {
     toast("error", `Server unavailable: ${error?.message}`);
   }
 
+  await settingsView.refresh();
+
   const session = loadSession();
   const sameWorkspace = Boolean(session && info && session.workspaceRoot === info.workspace.root);
 
@@ -537,7 +548,6 @@ async function init(): Promise<void> {
   }
 
   await refreshExtensions();
-  await settingsView.refresh();
   schedulePersist();
 }
 

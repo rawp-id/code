@@ -10,11 +10,12 @@ export interface Settings {
     highlightActiveLine: boolean;
     autoSave: "off" | "afterDelay" | "onFocusChange";
     autoSaveDelay: number;
+    colorTheme: string;
   };
   files: { exclude: string[] };
   search: { exclude: string[]; maxResults: number };
   terminal: { fontSize: number; prompt: string };
-  workbench: { sidebarWidth: number };
+  workbench: { sidebarWidth: number; iconTheme: "default" | "minimal" };
   [key: string]: any;
 }
 
@@ -27,6 +28,7 @@ export const DEFAULT_SETTINGS: Settings = {
     highlightActiveLine: true,
     autoSave: "off",
     autoSaveDelay: 1000,
+    colorTheme: "dark-plus",
   },
   files: {
     exclude: [
@@ -69,6 +71,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   workbench: {
     sidebarWidth: 240,
+    iconTheme: "default",
   },
 };
 

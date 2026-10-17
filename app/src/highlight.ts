@@ -1,36 +1,78 @@
 import { createHighlighterCore, type HighlighterCore } from "shiki/core";
 import { createOnigurumaEngine } from "shiki/engine/oniguruma";
 import wasm from "shiki/wasm";
-import shikiTheme from "@shikijs/themes/dark-plus";
-import type { Extension } from "@codemirror/state";
+import darkPlus from "@shikijs/themes/dark-plus";
+import oneDarkPro from "@shikijs/themes/one-dark-pro";
+import githubDark from "@shikijs/themes/github-dark";
+import monokai from "@shikijs/themes/monokai";
+import dracula from "@shikijs/themes/dracula";
+import nord from "@shikijs/themes/nord";
+import vitesseDark from "@shikijs/themes/vitesse-dark";
+import solarizedDark from "@shikijs/themes/solarized-dark";
+import materialTheme from "@shikijs/themes/material-theme";
+import catppuccinMocha from "@shikijs/themes/catppuccin-mocha";
+import tokyoNight from "@shikijs/themes/tokyo-night";
+import { StateEffect, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 
-const THEME = "dark-plus";
-const THEME_COLORS = (shikiTheme as any).colors ?? {};
-const FG = (shikiTheme as any).fg || THEME_COLORS["editor.foreground"] || "#d4d4d4";
-const BG = (shikiTheme as any).bg || THEME_COLORS["editor.background"] || "#1e1e1e";
+export const SHIKI_THEMES: Record<string, { label: string; theme: any }> = {
+  "dark-plus": { label: "Dark+ (VS Code)", theme: darkPlus },
+  "one-dark-pro": { label: "One Dark Pro", theme: oneDarkPro },
+  "github-dark": { label: "GitHub Dark", theme: githubDark },
+  monokai: { label: "Monokai", theme: monokai },
+  dracula: { label: "Dracula", theme: dracula },
+  nord: { label: "Nord", theme: nord },
+  "vitesse-dark": { label: "Vitesse Dark", theme: vitesseDark },
+  "solarized-dark": { label: "Solarized Dark", theme: solarizedDark },
+  "material-theme": { label: "Material Theme", theme: materialTheme },
+  "catppuccin-mocha": { label: "Catppuccin Mocha", theme: catppuccinMocha },
+  "tokyo-night": { label: "Tokyo Night", theme: tokyoNight },
+};
 
-/** Base editor theme derived from the Shiki theme, so everything matches VS Code. */
-export const shikiEditorTheme: Extension = EditorView.theme(
-  {
-    "&": { color: FG, backgroundColor: BG },
-    ".cm-content": { caretColor: FG },
-    ".cm-cursor, .cm-dropCursor": { borderLeftColor: FG },
-    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
-      backgroundColor: "#264f78",
+const DEFAULT_THEME = "dark-plus";
+let currentTheme = DEFAULT_THEME;
+
+export const refreshHighlighting = StateEffect.define<null>();
+
+export function setShikiTheme(name: string): string {
+  currentTheme = SHIKI_THEMES[name] ? name : DEFAULT_THEME;
+  return currentTheme;
+}
+
+function themeColors(name: string): { fg: string; bg: string } {
+  const theme = (SHIKI_THEMES[name] || SHIKI_THEMES[DEFAULT_THEME]).theme;
+  const colors = theme.colors ?? {};
+  return {
+    fg: theme.fg || colors["editor.foreground"] || "#d4d4d4",
+    bg: theme.bg || colors["editor.background"] || "#1e1e1e",
+  };
+}
+
+/** Base editor theme derived from the selected Shiki theme. */
+export function editorBaseTheme(name: string): Extension {
+  const { fg, bg } = themeColors(name);
+  return EditorView.theme(
+    {
+      "&": { color: fg, backgroundColor: bg },
+      ".cm-content": { caretColor: fg },
+      ".cm-cursor, .cm-dropCursor": { borderLeftColor: fg },
+      "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+        backgroundColor: "#264f78",
+      },
+      ".cm-gutters": { backgroundColor: bg, color: "#858585", border: "none" },
+      ".cm-activeLine": { backgroundColor: "rgba(255, 255, 255, 0.04)" },
+      ".cm-activeLineGutter": { backgroundColor: "rgba(255, 255, 255, 0.05)", color: "#c6c6c6" },
+      ".cm-lineNumbers .cm-gutterElement": { padding: "0 12px 0 6px" },
+      ".cm-selectionMatch": { backgroundColor: "#3a3d41" },
+      ".cm-matchingBracket, .cm-nonmatchingBracket": {
+        backgroundColor: "#3a3d41",
+        outline: "1px solid #888",
+      },
     },
-    ".cm-gutters": { backgroundColor: BG, color: "#858585", border: "none" },
-    ".cm-activeLine": { backgroundColor: "rgba(255, 255, 255, 0.04)" },
-    ".cm-activeLineGutter": { backgroundColor: "rgba(255, 255, 255, 0.05)", color: "#c6c6c6" },
-    ".cm-lineNumbers .cm-gutterElement": { padding: "0 12px 0 6px" },
-    ".cm-selectionMatch": { backgroundColor: "#3a3d41" },
-    ".cm-matchingBracket, .cm-nonmatchingBracket": {
-      backgroundColor: "#3a3d41",
-      outline: "1px solid #888",
-    },
-  },
-  { dark: true }
-);
+    { dark: true }
+  );
+}
+
 /**
  * TextMate grammars are loaded lazily so the bundle only carries the languages
  * that are actually opened. Add a line here to support another language.
@@ -75,7 +117,7 @@ const loaded = new Set<string>();
 function getCore(): Promise<HighlighterCore> {
   if (!corePromise) {
     corePromise = createHighlighterCore({
-      themes: [shikiTheme],
+      themes: Object.values(SHIKI_THEMES).map((entry) => entry.theme),
       langs: [],
       engine: createOnigurumaEngine(wasm),
     });
@@ -109,15 +151,13 @@ function buildDecorations(view: EditorView, tokens: any[][]): DecorationSet {
   const ranges = view.visibleRanges;
   let from = ranges.length ? ranges[0].from : 0;
   let to = ranges.length ? ranges[ranges.length - 1].to : total;
-  // Before the view has been measured, visibleRanges can be empty/degenerate;
-  // fall back to the whole document so highlighting appears immediately.
   if (to <= from) {
     from = 0;
     to = total;
   }
 
   const marks = new Map<string, Decoration>();
-  const ranges2: { from: number; to: number; deco: Decoration }[] = [];
+  const list: { from: number; to: number; deco: Decoration }[] = [];
 
   let offset = 0;
   for (const line of tokens) {
@@ -134,19 +174,15 @@ function buildDecorations(view: EditorView, tokens: any[][]): DecorationSet {
         mark = Decoration.mark({ attributes: { style } });
         marks.set(style, mark);
       }
-      ranges2.push({ from: start, to: end, deco: mark });
+      list.push({ from: start, to: end, deco: mark });
     }
-    offset = cursor + 1; // newline
+    offset = cursor + 1;
   }
 
-  ranges2.sort((a, b) => a.from - b.from || a.to - b.to);
-  return Decoration.set(
-    ranges2.map((range) => range.deco.range(range.from, range.to)),
-    true
-  );
+  list.sort((a, b) => a.from - b.from || a.to - b.to);
+  return Decoration.set(list.map((item) => item.deco.range(item.from, item.to)), true);
 }
 
-/** Async TextMate highlighting, applied as inline-styled marks. */
 class ShikiRunner {
   private decorations: DecorationSet = Decoration.none;
   private timer: number | undefined;
@@ -161,7 +197,12 @@ class ShikiRunner {
   }
 
   update(update: ViewUpdate): void {
-    if (update.docChanged || update.viewportChanged || update.geometryChanged) this.schedule(60);
+    const refreshed = update.transactions.some((tr) =>
+      tr.effects.some((effect) => effect.is(refreshHighlighting))
+    );
+    if (update.docChanged || update.viewportChanged || update.geometryChanged || refreshed) {
+      this.schedule(60);
+    }
   }
 
   destroy(): void {
@@ -180,7 +221,7 @@ class ShikiRunner {
       if (!(await ensureLanguage(this.lang))) return;
       const core = await getCore();
       if (this.destroyed) return;
-      const result = core.codeToTokens(text, { lang: this.lang, theme: THEME });
+      const result = core.codeToTokens(text, { lang: this.lang, theme: currentTheme });
       if (this.destroyed) return;
       this.decorations = buildDecorations(this.view, result.tokens);
       this.onUpdate(this.decorations);

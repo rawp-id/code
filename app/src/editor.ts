@@ -41,7 +41,7 @@ import { setDiagnostics, lintGutter, lintKeymap, type Diagnostic } from "@codemi
 import { bridge } from "./bridge";
 import { bus } from "./bus";
 import { languageFor } from "./lang";
-import { shikiHighlighting, shikiEditorTheme } from "./highlight";
+import { editorBaseTheme, refreshHighlighting, setShikiTheme, shikiHighlighting } from "./highlight";
 
 export interface OpenDoc {
   path: string;
@@ -70,6 +70,7 @@ const tabCompartment = new Compartment();
 const wrapCompartment = new Compartment();
 const lineNumbersCompartment = new Compartment();
 const activeLineCompartment = new Compartment();
+const themeCompartment = new Compartment();
 
 type EditorPrefs = {
   fontSize: number;
@@ -77,6 +78,7 @@ type EditorPrefs = {
   wordWrap: "off" | "on";
   lineNumbers: boolean;
   highlightActiveLine: boolean;
+  theme: string;
 };
 
 const DEFAULT_PREFS: EditorPrefs = {
@@ -85,6 +87,7 @@ const DEFAULT_PREFS: EditorPrefs = {
   wordWrap: "off",
   lineNumbers: true,
   highlightActiveLine: true,
+  theme: "dark-plus",
 };
 
 const fontSizeTheme = (size: number): Extension =>
@@ -134,7 +137,7 @@ export class EditorManager {
   private emptyState(): EditorState {
     return EditorState.create({
       doc: "",
-      extensions: [EditorView.editable.of(false), shikiEditorTheme],
+      extensions: [EditorView.editable.of(false), editorBaseTheme(this.prefs.theme)],
     });
   }
 
@@ -163,7 +166,7 @@ export class EditorManager {
       highlightSelectionMatches(),
       lintGutter(),
       this.hoverTooltip(),
-      shikiEditorTheme,
+      themeCompartment.of(editorBaseTheme(this.prefs.theme)),
       shikiHighlighting(spec.shiki),
       ...spec.extensions,
       keymap.of([
@@ -302,6 +305,7 @@ export class EditorManager {
       wordWrap: settings?.editor?.wordWrap === "on" ? "on" : "off",
       lineNumbers: settings?.editor?.lineNumbers !== false,
       highlightActiveLine: settings?.editor?.highlightActiveLine !== false,
+      theme: setShikiTheme(settings?.editor?.colorTheme ?? DEFAULT_PREFS.theme),
     };
     const effects = [
       fontCompartment.reconfigure(fontSizeTheme(this.prefs.fontSize)),
@@ -313,14 +317,17 @@ export class EditorManager {
         this.prefs.lineNumbers ? [lineNumbers(), highlightActiveLineGutter()] : []
       ),
       activeLineCompartment.reconfigure(
-        this.prefs.highlightActiveLine ? highlightActiveLine() : []
+        this.prefs.highlightActiveLine ? [highlightActiveLine()] : []
       ),
+      themeCompartment.reconfigure(editorBaseTheme(this.prefs.theme)),
     ];
     for (const doc of this.docs.values()) {
+      if (doc.path === this.active) continue;
       doc.state = doc.state.update({ effects }).state;
     }
-    const active = this.active ? this.docs.get(this.active) : undefined;
-    if (active) this.view.setState(active.state);
+    if (this.active) {
+      this.view.dispatch({ effects: [...effects, refreshHighlighting.of(null)] });
+    }
     this.fire();
   }
 

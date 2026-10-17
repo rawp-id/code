@@ -77,12 +77,8 @@ Drop a folder in `server/extensions/` containing a `package.json` (with
 commands (from the palette or the Extensions sidebar) activates the owning
 extension automatically, matching `activationEvents`.
 
-Working examples:
-
-- `hello` — messages, input box, quick pick, output channel.
-- `word-count` — reads a file with Node `fs`.
-- `text-tools` — document model, `TextEditor.edit`, `WorkspaceEdit`,
-  `onDidChangeTextDocument` / `onDidSaveTextDocument` / selection events.
+No extensions are bundled by default. Install one from the **Extensions** view
+(Open VSX / VS Code Marketplace) or drop a folder in `server/extensions/`.
 
 The shim currently supports:
 
@@ -151,10 +147,13 @@ leave the shell's own prompt untouched. `PS2`, `PROMPT_COMMAND`, `BASH_ENV` and
 ## Settings
 
 Open the **Settings** view (gear icon in the activity bar) to configure the
-editor. Changes apply live and are written to `<workspace>/settings.json`.
+editor. Settings are shown as a **list**; tap a row to open its detail and edit
+it. Changes apply live and are written to `<workspace>/settings.json`.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
+| `editor.colorTheme` | `dark-plus` | Dark+, One Dark Pro, GitHub Dark, Monokai, Dracula, Nord, Vitesse, Solarized, Material, Catppuccin, Tokyo Night |
+| `workbench.iconTheme` | `default` | `default` (colored) / `minimal` (monochrome) |
 | `editor.fontSize` | 14 | |
 | `editor.tabSize` | 2 | |
 | `editor.wordWrap` | `off` | `off` / `on` |

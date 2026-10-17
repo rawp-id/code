@@ -1313,3 +1313,81 @@ body {
   color: var(--fg-dim);
   font-size: 12px;
 }
+
+.setting-row.clickable {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.setting-row.clickable:hover {
+  background: var(--hover);
+}
+
+.setting-row.clickable .setting-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-value {
+  color: var(--fg-dim);
+  font-size: 11px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-chevron {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--fg-dim);
+}
+
+.setting-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+.settings-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.settings-back:hover {
+  color: var(--fg);
+}
+
+.settings-back svg {
+  width: 14px;
+  height: 14px;
+}
+
+.settings-detail-title {
+  padding: 4px 12px 2px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-detail-row {
+  padding: 4px 12px 10px;
+}
+
+.settings-code {
+  margin: 8px 12px;
+  padding: 10px;
+  background: #2d2d2d;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow: auto;
+  white-space: pre;
+}

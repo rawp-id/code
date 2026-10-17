@@ -45,7 +45,14 @@ export const icons = {
 };
 
 /** Accent colour for a file icon, by extension. */
+let iconTheme: "default" | "minimal" = "default";
+
+export function setIconTheme(name: string): void {
+  iconTheme = name === "minimal" ? "minimal" : "default";
+}
+
 export function fileColor(fileName: string): string {
+  if (iconTheme === "minimal") return "#8a8a8a";
   const dot = fileName.lastIndexOf(".");
   const ext = dot >= 0 ? fileName.slice(dot).toLowerCase() : "";
   const colors: Record<string, string> = {

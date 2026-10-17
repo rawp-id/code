@@ -1,5 +1,7 @@
 import { bridge } from "./bridge";
 import { DEFAULT_SETTINGS, getPath, setPath, type Settings } from "./settings";
+import { SHIKI_THEMES } from "./highlight";
+import { icons } from "./icons";
 
 interface SettingDef {
   id: string;
@@ -14,7 +16,33 @@ interface SettingDef {
   placeholder?: string;
 }
 
+const COLOR_THEMES = Object.entries(SHIKI_THEMES).map(([value, entry]) => ({
+  value,
+  label: entry.label,
+}));
+
+const ICON_THEMES = [
+  { value: "default", label: "Default (colored)" },
+  { value: "minimal", label: "Minimal (monochrome)" },
+];
+
 const SCHEMA: SettingDef[] = [
+  {
+    id: "editor.colorTheme",
+    section: "Themes",
+    label: "Color Theme",
+    description: "Syntax highlighting theme (TextMate, via Shiki).",
+    type: "select",
+    options: COLOR_THEMES,
+  },
+  {
+    id: "workbench.iconTheme",
+    section: "Themes",
+    label: "File Icon Theme",
+    description: "Colour style for file icons in the Explorer and tabs.",
+    type: "select",
+    options: ICON_THEMES,
+  },
   {
     id: "editor.fontSize",
     section: "Editor",
@@ -126,12 +154,15 @@ const SCHEMA: SettingDef[] = [
   },
 ];
 
-const SECTION_ORDER = ["Editor", "Files", "Search", "Terminal", "Workbench"];
+const SECTIONS = ["Themes", "Editor", "Files", "Search", "Terminal", "Workbench"];
 
 export class SettingsView {
   private searchEl: HTMLInputElement;
   private bodyEl: HTMLElement;
   private settings: Settings = structuredClone(DEFAULT_SETTINGS);
+  private lspConfig: Record<string, { command: string; args?: string[] }> = {};
+  private mode: "list" | "detail" = "list";
+  private selectedId: string | null = null;
   private timer: number | undefined;
 
   constructor(
@@ -148,7 +179,13 @@ export class SettingsView {
     `;
     this.searchEl = this.el.querySelector<HTMLInputElement>("[data-settings-search]")!;
     this.bodyEl = this.el.querySelector<HTMLElement>("[data-settings-body]")!;
-    this.searchEl.addEventListener("input", () => this.render());
+    this.searchEl.addEventListener("input", () => {
+      if (this.mode === "detail") {
+        this.mode = "list";
+        this.selectedId = null;
+      }
+      this.render();
+    });
   }
 
   focus(): void {
@@ -161,15 +198,31 @@ export class SettingsView {
     } catch {
       /* keep defaults */
     }
+    try {
+      this.lspConfig = await bridge.request("lsp.config");
+    } catch {
+      this.lspConfig = {};
+    }
+    this.mode = "list";
+    this.selectedId = null;
     this.render();
     this.onChange?.(this.settings);
   }
 
   private render(): void {
-    const query = this.searchEl.value.trim().toLowerCase();
     this.bodyEl.innerHTML = "";
+    if (this.mode === "detail" && this.selectedId) {
+      this.renderDetail(this.selectedId);
+      return;
+    }
+    this.renderList();
+  }
 
-    for (const section of SECTION_ORDER) {
+  private renderList(): void {
+    const query = this.searchEl.value.trim().toLowerCase();
+    let count = 0;
+
+    for (const section of SECTIONS) {
       const defs = SCHEMA.filter(
         (def) =>
           def.section === section &&
@@ -180,44 +233,157 @@ export class SettingsView {
       );
       if (defs.length === 0) continue;
 
-      const heading = document.createElement("div");
-      heading.className = "settings-section";
-      heading.textContent = section;
-      this.bodyEl.append(heading);
-
+      this.bodyEl.append(this.heading(section));
       for (const def of defs) {
-        this.bodyEl.append(this.row(def));
+        this.bodyEl.append(this.listRow(def));
+        count += 1;
       }
     }
 
-    if (this.bodyEl.childElementCount === 0) {
+    // Language servers are shown read-only.
+    const servers = Object.entries(this.lspConfig || {});
+    if (servers.length > 0 && (!query || "language servers lsp".includes(query))) {
+      this.bodyEl.append(this.heading("Language Servers"));
+      for (const [language, spec] of servers) {
+        const row = document.createElement("div");
+        row.className = "setting-row clickable";
+        const info = document.createElement("div");
+        info.className = "setting-info";
+        const label = document.createElement("div");
+        label.className = "setting-label";
+        label.textContent = language;
+        const value = document.createElement("div");
+        value.className = "setting-value";
+        value.textContent = `${spec.command} ${(spec.args || []).join(" ")}`.trim();
+        info.append(label, value);
+        row.append(info, this.chevron());
+        row.onclick = () => {
+          this.mode = "detail";
+          this.selectedId = `lsp:${language}`;
+          this.render();
+        };
+        this.bodyEl.append(row);
+        count += 1;
+      }
+    }
+
+    if (count === 0) {
       this.bodyEl.innerHTML = `<div class="settings-empty">No matching settings</div>`;
     }
   }
 
-  private row(def: SettingDef): HTMLElement {
-    const row = document.createElement("div");
-    row.className = "setting-row";
+  private renderDetail(id: string): void {
+    if (id.startsWith("lsp:")) {
+      const language = id.slice(4);
+      const spec = this.lspConfig[language];
+      this.bodyEl.append(this.backButton());
+      const title = document.createElement("div");
+      title.className = "settings-detail-title";
+      title.textContent = `Language server: ${language}`;
+      const pre = document.createElement("pre");
+      pre.className = "settings-code";
+      pre.textContent = JSON.stringify(spec ?? {}, null, 2);
+      const note = document.createElement("div");
+      note.className = "setting-desc";
+      note.textContent =
+        "Configure servers in lsp.config.json (workspace root or server package).";
+      this.bodyEl.append(title, note, pre);
+      return;
+    }
+
+    const def = SCHEMA.find((item) => item.id === id);
+    if (!def) {
+      this.mode = "list";
+      this.render();
+      return;
+    }
+
+    this.bodyEl.append(this.backButton());
+
+    const title = document.createElement("div");
+    title.className = "settings-detail-title";
+    title.textContent = def.label;
 
     const info = document.createElement("div");
-    info.className = "setting-info";
-    const label = document.createElement("div");
-    label.className = "setting-label";
-    label.textContent = def.label;
-    info.append(label);
-    if (def.description) {
-      const description = document.createElement("div");
-      description.className = "setting-desc";
-      description.textContent = def.description;
-      info.append(description);
-    }
+    info.className = "settings-detail-row";
+    const description = document.createElement("div");
+    description.className = "setting-desc";
+    description.textContent = def.description || def.id;
+    info.append(description);
 
     const control = document.createElement("div");
     control.className = "setting-control";
     control.append(this.control(def));
 
-    row.append(info, control);
+    const reset = document.createElement("button");
+    reset.className = "ext-btn";
+    reset.textContent = "Reset to default";
+    reset.onclick = () => {
+      this.update(def.id, structuredClone(getPath(DEFAULT_SETTINGS, def.id)));
+      this.render();
+    };
+
+    this.bodyEl.append(title, info, control, reset);
+  }
+
+  private heading(text: string): HTMLElement {
+    const heading = document.createElement("div");
+    heading.className = "settings-section";
+    heading.textContent = text;
+    return heading;
+  }
+
+  private chevron(): HTMLElement {
+    const chevron = document.createElement("span");
+    chevron.className = "setting-chevron";
+    chevron.innerHTML = icons.chevronRight;
+    return chevron;
+  }
+
+  private backButton(): HTMLElement {
+    const back = document.createElement("button");
+    back.className = "settings-back";
+    back.innerHTML = `${icons.chevronLeft}<span>Back</span>`;
+    back.onclick = () => {
+      this.mode = "list";
+      this.selectedId = null;
+      this.render();
+    };
+    return back;
+  }
+
+  private listRow(def: SettingDef): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "setting-row clickable";
+    const info = document.createElement("div");
+    info.className = "setting-info";
+    const label = document.createElement("div");
+    label.className = "setting-label";
+    label.textContent = def.label;
+    const value = document.createElement("div");
+    value.className = "setting-value";
+    value.textContent = this.formatValue(def);
+    info.append(label, value);
+    row.append(info, this.chevron());
+    row.onclick = () => {
+      this.mode = "detail";
+      this.selectedId = def.id;
+      this.render();
+    };
     return row;
+  }
+
+  private formatValue(def: SettingDef): string {
+    const value = getPath(this.settings, def.id, getPath(DEFAULT_SETTINGS, def.id));
+    if (def.type === "boolean") return value ? "On" : "Off";
+    if (def.type === "select") {
+      return def.options?.find((option) => option.value === value)?.label ?? String(value ?? "");
+    }
+    if (def.type === "stringArray") {
+      const list = Array.isArray(value) ? value : [];
+      return list.length ? `${list.length} entries` : "None";
+    }
+    return value === "" || value === undefined ? "—" : String(value);
   }
 
   private control(def: SettingDef): HTMLElement {
@@ -264,16 +430,18 @@ export class SettingsView {
 
     if (def.type === "stringArray") {
       const textarea = document.createElement("textarea");
-      textarea.rows = 4;
+      textarea.rows = 6;
       textarea.spellcheck = false;
       if (def.placeholder) textarea.placeholder = def.placeholder;
       textarea.value = Array.isArray(value) ? value.join("\n") : "";
       textarea.onchange = () => {
-        const list = textarea.value
-          .split("\n")
-          .map((entry) => entry.trim())
-          .filter(Boolean);
-        this.update(def.id, list);
+        this.update(
+          def.id,
+          textarea.value
+            .split("\n")
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+        );
       };
       return textarea;
     }
