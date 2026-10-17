@@ -547,7 +547,7 @@ export class ExtensionsView {
       name: extension.displayName,
       version: extension.version,
       description: extension.runtime
-        ? "Functional extension (executes in Node.js host)"
+        ? "Runtime extension — code needs the Kode server; its themes/icons still work in Standalone Mode"
         : "Declarative extension (themes, icons, grammars)",
       meta: `${extension.id} · ${extension.runtime ? "runtime" : "declarative"}${
         extension.disabled ? " · disabled" : ""

@@ -163,9 +163,12 @@ Seluruh jalur kode yang tadinya hanya bergantung pada server Node kini memiliki 
    - Helper `resolveAssetUrl()` mengembalikan `data:`/`http(s):` apa adanya dan hanya menambahkan origin server bila benar-benar tersambung; ikon tidak lagi pecah saat offline.
 6. **Tema & ikon ekstensi klien**
    - `SettingsView` mengenali id tema `client:<ext>:<path>` (bukan hanya `ext:`), sehingga tema warna dan icon theme dari IndexedDB benar-benar diterapkan saat standalone.
-7. **Ekstensi declarative vs runtime**
+   - `readIconTheme()` menormalisasi path relatif ber-`../` (Material Icon Theme: `dist/material-icons.json` → `icons/*.svg`) dan ikut memetakan `folderNames`, `folderNamesExpanded`, serta `languageIds` (sebelumnya hanya `file`/`folder`/`fileExtensions`/`fileNames`).
+7. **Marketplace Open VSX dari klien**
+   - `offset` tidak lagi dikirim sebagai `"undefined"` dan `sortBy: "installs"` dipetakan ke `downloadCount` sesuai API Open VSX — pencarian & daftar populer tidak lagi gagal HTTP 400.
+8. **Ekstensi declarative vs runtime**
    - Install langsung dari URL VSIX bekerja di klien (`clientExtensions.installVsix`).
-   - Menjalankan kode ekstensi runtime ditolak dengan pesan yang menjelaskan butuh server; tema/ikon tetap berfungsi tanpa server.
-8. **Koneksi & startup**
+   - Menjalankan kode ekstensi runtime ditolak dengan pesan yang menjelaskan butuh server; kontribusi declarative (tema/ikon) dari ekstensi yang punya `main` tetap dibaca dan berfungsi tanpa server.
+9. **Koneksi & startup**
    - `Bridge.waitForConnection()` memberi server yang berjalan kesempatan menjawab sebelum memutuskan mode offline, menghilangkan balapan saat startup.
    - `setUrl("")` (Disconnect / Work Offline) tidak lagi membuat `WebSocket` tidak valid; tidak ada pop-up koneksi otomatis.

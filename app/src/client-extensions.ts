@@ -47,6 +47,20 @@ const DB_NAME = "kode-extensions-db";
 const STORE_NAME = "extensions";
 const LS_FALLBACK_KEY = "kode.client_extensions_summary";
 
+/** Resolve `./` and `../` segments inside a VSIX-relative path. */
+function normalizePath(input: string): string {
+  const out: string[] = [];
+  for (const part of String(input).split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      out.pop();
+      continue;
+    }
+    out.push(part);
+  }
+  return out.join("/");
+}
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined") {
@@ -479,33 +493,38 @@ class ClientExtensionService {
     if (!raw) throw new Error(`Icon theme file not found: ${themePath}`);
     const theme = JSON.parse(raw);
     const definitions = theme.iconDefinitions || {};
+    const baseDir = cleanPath.slice(0, cleanPath.lastIndexOf("/"));
 
     const resolveIcon = (iconId?: string): string | null => {
-      if (!iconId || !definitions[iconId]) return null;
-      const iconPath = definitions[iconId].iconPath;
+      const iconPath = iconId ? definitions[iconId]?.iconPath : undefined;
       if (!iconPath) return null;
-      const normalized = iconPath.replace(/^\.\//, "");
-      const baseDir = cleanPath.slice(0, cleanPath.lastIndexOf("/"));
-      const candidate = baseDir ? `${baseDir}/${normalized}` : normalized;
-      const svg = ext.files[candidate] || ext.files[normalized];
+      // Icon paths are relative to the theme file and often use `../`
+      // (e.g. Material Icon Theme ships `dist/material-icons.json` that points
+      // to `./../icons/*.svg`). Normalize before looking the file up.
+      const candidate = normalizePath(baseDir ? `${baseDir}/${iconPath}` : iconPath);
+      const svg = ext.files[candidate] || ext.files[normalizePath(iconPath)];
       if (svg) return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
       return null;
+    };
+
+    const mapDefs = (source: Record<string, string>, lower = false): Record<string, string> => {
+      const out: Record<string, string> = {};
+      for (const [key, id] of Object.entries(source || {})) {
+        const url = resolveIcon(id);
+        if (url) out[lower ? key.toLowerCase() : key] = url;
+      }
+      return out;
     };
 
     return {
       folder: resolveIcon(theme.folder),
       folderExpanded: resolveIcon(theme.folderExpanded),
       file: resolveIcon(theme.file),
-      fileExtensions: Object.fromEntries(
-        Object.entries(theme.fileExtensions || {})
-          .map(([extName, id]) => [extName, resolveIcon(id as string)])
-          .filter(([, url]) => Boolean(url))
-      ),
-      fileNames: Object.fromEntries(
-        Object.entries(theme.fileNames || {})
-          .map(([name, id]) => [name, resolveIcon(id as string)])
-          .filter(([, url]) => Boolean(url))
-      ),
+      fileExtensions: mapDefs(theme.fileExtensions || {}, true),
+      fileNames: mapDefs(theme.fileNames || {}),
+      folderNames: mapDefs(theme.folderNames || {}),
+      folderNamesExpanded: mapDefs(theme.folderNamesExpanded || {}),
+      languageIds: mapDefs(theme.languageIds || {}),
     };
   }
 }
