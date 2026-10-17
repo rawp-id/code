@@ -6,5 +6,8 @@
   },
   "textTools": {
     "greeting": "Hello from settings.json"
+  },
+  "terminal": {
+    "prompt": "\\u@\\h \\W \\$ "
   }
 }

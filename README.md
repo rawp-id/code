@@ -101,6 +101,20 @@ Toggle Terminal**. `PtyManager` picks a backend automatically:
 The status bar shows the active mode. On Android, run the server inside
 Termux/proot (which ships a real pty) or use a future JNI `forkpty` plugin.
 
+### Prompt
+
+The terminal sets `PS1` itself so a broken `PROMPT_COMMAND` / leaked `PS1` from
+whatever started the server cannot spam errors. Configure it in
+`settings.json`:
+
+```json
+{ "terminal": { "prompt": "\\u@\\h \\W \\$ " } }
+```
+
+Set `"prompt": false` to leave the shell's own prompt untouched. `PS2`,
+`PROMPT_COMMAND`, `BASH_ENV` and `ENV` are always stripped from the spawned
+shell.
+
 ## Language servers
 
 `lsp.config.json` maps a language id to a server command. It is merged from the

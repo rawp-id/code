@@ -58,14 +58,14 @@ function defaultShell(): string {
  * print errors on every prompt, so we drop them and let the shell's own config
  * define its prompt.
  */
-function shellEnv(): NodeJS.ProcessEnv {
+function shellEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, TERM: "xterm-256color" };
   delete env.PS1;
   delete env.PS2;
   delete env.PROMPT_COMMAND;
   delete env.BASH_ENV;
   delete env.ENV;
-  return env;
+  return { ...env, ...extra };
 }
 
 export class PtyManager {
@@ -85,7 +85,7 @@ export class PtyManager {
   }
 
   async spawn(
-    opts: { cols: number; rows: number; shell?: string; cwd?: string },
+    opts: { cols: number; rows: number; shell?: string; cwd?: string; env?: Record<string, string> },
     onData: (id: string, data: string) => void,
     onExit: (id: string, code: number) => void
   ): Promise<string> {
@@ -94,7 +94,7 @@ export class PtyManager {
     const cwd = opts.cwd || process.cwd();
     const cols = opts.cols || 80;
     const rows = opts.rows || 24;
-    const env = shellEnv();
+    const env = shellEnv(opts.env);
 
     const pty = await loadPty();
     if (pty) {

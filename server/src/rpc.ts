@@ -68,6 +68,15 @@ export function handleConnection(ws: WebSocket): void {
 
   const host = new ExtensionHost(EXTENSIONS_DIR, workspace.root, ui);
 
+  const DEFAULT_PS1 = "\\u@\\h \\W \\$ ";
+  const terminalEnv = async (): Promise<Record<string, string>> => {
+    const settings = await workspace.readSettings();
+    const terminal = (settings.terminal ?? {}) as Record<string, unknown>;
+    if (terminal.prompt === false) return {};
+    const prompt = typeof terminal.prompt === "string" ? terminal.prompt : DEFAULT_PS1;
+    return { PS1: prompt };
+  };
+
   const methods: Record<string, (params: any) => any> = {
     "server.info": async () => {
       await pty.probe();
@@ -128,12 +137,15 @@ export function handleConnection(ws: WebSocket): void {
         isDirty: document.isDirty,
       })),
 
-    "pty.spawn": ({ cols, rows, shell }: { cols: number; rows: number; shell?: string }) =>
-      pty
-        .spawn({ cols, rows, shell, cwd: workspace.root }, (id, data) =>
-          event("pty.data", { id, data })
-        , (id, code) => event("pty.exit", { id, code }))
-        .then((id) => ({ id })),
+    "pty.spawn": async ({ cols, rows, shell }: { cols: number; rows: number; shell?: string }) => {
+      const env = await terminalEnv();
+      const id = await pty.spawn(
+        { cols, rows, shell, cwd: workspace.root, env },
+        (ptyId, data) => event("pty.data", { id: ptyId, data }),
+        (ptyId, code) => event("pty.exit", { id: ptyId, code })
+      );
+      return { id };
+    },
     "pty.write": ({ id, data }: { id: string; data: string }) => pty.write(id, data),
     "pty.resize": ({ id, cols, rows }: { id: string; cols: number; rows: number }) =>
       pty.resize(id, cols, rows),

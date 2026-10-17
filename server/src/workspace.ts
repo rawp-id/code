@@ -60,6 +60,15 @@ export class Workspace {
     return fs.readFile(this.resolve(rel), "utf8");
   }
 
+  /** Read `settings.json` from the workspace root, or an empty object. */
+  async readSettings(): Promise<Record<string, any>> {
+    try {
+      return JSON.parse(await fs.readFile(path.join(this.root, "settings.json"), "utf8"));
+    } catch {
+      return {};
+    }
+  }
+
   async writeFile(rel: string, content: string): Promise<void> {
     const target = this.resolve(rel);
     await fs.mkdir(path.dirname(target), { recursive: true });
