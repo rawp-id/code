@@ -116,7 +116,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 6px 4px 12px;
+  padding: 8px 6px 6px 12px;
 }
 
 .sidebar .sidebar-title {
@@ -607,7 +607,7 @@ body {
 .ext-search {
   display: flex;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 12px 8px 8px;
 }
 
 .ext-search input[type="text"] {
@@ -923,7 +923,7 @@ body {
 }
 
 .search-inputs {
-  padding: 6px 8px 0;
+  padding: 12px 8px 0;
 }
 
 .search-inputs input[type="text"] {
@@ -1212,7 +1212,7 @@ body {
 }
 
 .settings-search {
-  padding: 6px 8px;
+  padding: 12px 8px 8px;
 }
 
 .settings-search input {
