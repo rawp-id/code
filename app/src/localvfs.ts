@@ -1,4 +1,5 @@
 import type { DirEntry, ServerInfo } from "./bridge";
+import { clientExtensions } from "./client-extensions";
 
 const STORAGE_KEY = "kode.local_vfs";
 const SETTINGS_KEY = "kode.local_settings";
@@ -277,8 +278,49 @@ export class LocalVfs {
       }
 
       case "ext.list":
+        return clientExtensions.list();
+
+      case "ext.marketplace.search":
+        return clientExtensions.searchMarketplace(
+          params?.query || "",
+          params?.size,
+          params?.offset,
+          params?.sortBy,
+          params?.sortOrder
+        );
+
+      case "ext.marketplace.detail":
+        return clientExtensions.getMarketplaceDetail(params?.id);
+
+      case "ext.detail":
+        return clientExtensions.detail(params?.id);
+
+      case "ext.marketplace.install":
+        return clientExtensions.installVsix(params?.downloadUrl);
+
+      case "ext.enable":
+        clientExtensions.enable(params?.id);
+        return true;
+
+      case "ext.disable":
+        clientExtensions.disable(params?.id);
+        return true;
+
+      case "ext.uninstall":
+        return clientExtensions.uninstall(params?.id);
+
       case "ext.themes":
+        return clientExtensions.listThemes();
+
+      case "ext.themeData":
+        return clientExtensions.readTheme(params?.extensionId, params?.path);
+
       case "ext.iconThemes":
+        return clientExtensions.listIconThemes();
+
+      case "ext.iconThemeData":
+        return clientExtensions.readIconTheme(params?.extensionId, params?.path);
+
       case "ext.commands":
         return [];
 
