@@ -292,26 +292,60 @@ export class EditorManager {
     const word = context.matchBefore(/[\w$#-]*/);
     if (!word) return null;
     if (word.from === word.to && !context.explicit) return null;
+    const prefix = context.state.sliceDoc(word.from, context.pos);
     const line = context.state.doc.lineAt(context.pos);
     const position = { line: line.number - 1, character: context.pos - line.from };
     const uri = "file://" + path;
-    try {
-      const [lspItems, extItems] = await Promise.all([
-        bridge.request<any[]>("lsp.completion", { uri, position }).catch(() => []),
-        bridge.request<any[]>("ext.completion", { uri, position }).catch(() => []),
-      ]);
-      const seen = new Set<string>();
-      const options: Completion[] = [];
-      for (const item of [...(lspItems || []), ...(extItems || [])]) {
-        if (!item?.label || seen.has(item.label)) continue;
-        seen.add(item.label);
-        options.push({ label: item.label, type: LSP_KIND[item.kind] || "text", detail: item.detail });
-      }
-      if (options.length === 0) return null;
-      return { from: word.from, options, validFor: /^[\w$#-]*$/ };
-    } catch {
-      return null;
+
+    const [lspItems, extItems] = await Promise.all([
+      bridge.request<any[]>("lsp.completion", { uri, position }).catch(() => []),
+      bridge.request<any[]>("ext.completion", { uri, position }).catch(() => []),
+    ]);
+
+    const seen = new Set<string>();
+    const options: Completion[] = [];
+    const add = (label: unknown, type: string, detail?: unknown) => {
+      if (typeof label !== "string" || !label || seen.has(label)) return;
+      seen.add(label);
+      options.push({ label, type, detail: typeof detail === "string" ? detail : undefined });
+    };
+
+    for (const item of [...(lspItems || []), ...(extItems || [])]) {
+      add(item?.label, LSP_KIND[item?.kind] || "text", item?.detail);
     }
+    // VS Code-style word based suggestions, so Ctrl+Space is useful in every
+    // language (these come from the open documents, never faked keywords).
+    for (const candidate of this.wordsMatching(path, prefix, context.explicit)) {
+      add(candidate, "text");
+    }
+
+    if (options.length === 0) return null;
+    return { from: word.from, options, validFor: /^[\w$#-]*$/ };
+  }
+
+  private wordsMatching(activePath: string, prefix: string, explicit: boolean): string[] {
+    const lower = prefix.toLowerCase();
+    if (!lower && !explicit) return [];
+    const limit = lower ? 200 : 40;
+    const found = new Set<string>();
+    const texts: string[] = [];
+    const active = this.docs.get(activePath);
+    if (active) texts.push(active.state.doc.toString());
+    for (const doc of this.docs.values()) {
+      if (doc.path !== activePath) texts.push(doc.state.doc.toString());
+    }
+    for (const text of texts) {
+      const matches = text.match(/[A-Za-z_$][A-Za-z0-9_$]{1,}/g);
+      if (!matches) continue;
+      for (const match of matches) {
+        if (lower && !match.toLowerCase().startsWith(lower)) continue;
+        if (match === prefix) continue;
+        found.add(match);
+        if (found.size >= limit) break;
+      }
+      if (found.size >= limit) break;
+    }
+    return [...found].sort();
   }
 
   private hoverTooltip(): Extension {

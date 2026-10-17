@@ -9,5 +9,8 @@
   "typescriptreact": { "command": "typescript-language-server", "args": ["--stdio"] },
   "javascript": { "command": "typescript-language-server", "args": ["--stdio"] },
   "javascriptreact": { "command": "typescript-language-server", "args": ["--stdio"] },
-  "markdown": { "command": "vscode-markdown-language-server", "args": ["--stdio"] }
+  "markdown": { "command": "vscode-markdown-language-server", "args": ["--stdio"] },
+  "python": { "command": "pyright-langserver", "args": ["--stdio"] },
+  "yaml": { "command": "yaml-language-server", "args": ["--stdio"] },
+  "shellscript": { "command": "bash-language-server", "args": ["start"] }
 }

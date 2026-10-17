@@ -28,6 +28,8 @@ server/   Node process: workspace FS, terminal (pty), extension host, LSP
 - **Search in files** — sidebar search view (`Ctrl+Shift+F`) with case, regex and
   whole-word options; results are grouped per file and clicking one opens the
   file at that line.
+- **Word-based suggestions** (from open documents) merged into completion, so
+  Ctrl+Space works even where no language server is configured.
 - Integrated terminal (`Ctrl+`` `) rendered with **xterm.js**, backed by a pty
   (`node-pty`, or a bundled Python pty bridge when it cannot build).
 - **Extension host** that loads CommonJS VS Code extensions and serves a
@@ -153,13 +155,19 @@ The server ships real language servers and resolves their binaries from
 | HTML | `vscode-html-language-server` |
 | CSS / SCSS / Less | `vscode-css-language-server` |
 | TypeScript / JavaScript / TSX / JSX | `typescript-language-server` (tsserver) |
+| Python | `pyright-langserver` |
+| YAML | `yaml-language-server` |
+| Shell / Bash | `bash-language-server` |
 | Markdown | `vscode-markdown-language-server` |
 
 `lsp.config.json` maps a language id to a server command. It is merged from the
 workspace root and the server package root, so a workspace can override the
 defaults. A language with **no configured server gets no completion and no
-diagnostics** — suggestions are never faked. `"demo"` (the bundled demo server)
-is opt-in, and `"*"` can be used as a catch-all fallback if you really want one.
+diagnostics** — language keywords are never faked. `"demo"` (the bundled demo
+server) is opt-in, and `"*"` can be used as a catch-all fallback if you really
+want one. Independently of any server, **word-based suggestions** from the open
+documents are always offered (like VS Code), so Ctrl+Space is useful in every
+language.
 
 ```json
 {
