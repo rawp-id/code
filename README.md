@@ -107,6 +107,15 @@ installs, rating, tags, license, repository link and the README (markdown from
 Open VSX, HTML from the VS Code Marketplace). Installing or uninstalling from
 the detail page keeps it in sync.
 
+Installed extensions are more than decoration:
+
+- **Color themes** (`contributes.themes`) appear under Settings → Color Theme and
+  apply live (the VS Code theme JSON is loaded into Shiki).
+- **Icon themes** (`contributes.iconThemes`) appear under Settings → File Icon
+  Theme and replace the Explorer/tab icons.
+- **Language servers shipped inside extensions** are detected: e.g. installing
+  **Intelephense** enables PHP completion/diagnostics automatically.
+
 You can also use **Extensions: Install from VSIX…** from the command palette
 with a local `.vsix` path or a URL.
 
@@ -185,6 +194,7 @@ The server ships real language servers and resolves their binaries from
 | Python | `pyright-langserver` |
 | YAML | `yaml-language-server` |
 | Shell / Bash | `bash-language-server` |
+| PHP | Intelephense (bundled in its installed extension) |
 | Markdown | `vscode-markdown-language-server` |
 
 `lsp.config.json` maps a language id to a server command. It is merged from the

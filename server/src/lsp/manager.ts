@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -32,6 +32,28 @@ function positionAt(text: string, offset: number): { line: number; character: nu
     }
   }
   return { line, character: limit - lineStart };
+}
+
+/** Intelephense ships its PHP language server inside the VS Code extension. */
+function findIntelephense(): string | null {
+  const dir = path.join(SERVER_ROOT, "extensions");
+  try {
+    for (const name of readdirSync(dir)) {
+      if (!name.startsWith("bmewburn.vscode-intelephense-client-")) continue;
+      const server = path.join(
+        dir,
+        name,
+        "node_modules",
+        "intelephense",
+        "lib",
+        "intelephense.js"
+      );
+      if (existsSync(server)) return server;
+    }
+  } catch {
+    /* no extensions dir */
+  }
+  return null;
 }
 
 /** Find a `node_modules/.bin` executable by walking up from the server root. */
@@ -244,7 +266,14 @@ export class LspManager {
   private serverFor(languageId: string): { command: string; args: string[] } | null {
     const config = this.loadConfig();
     const spec = config[languageId] || config["*"];
-    if (!spec) return null;
+    if (!spec) {
+      // Extensions can provide their own server (e.g. Intelephense for PHP).
+      if (languageId === "php") {
+        const intelephense = findIntelephense();
+        if (intelephense) return { command: process.execPath, args: [intelephense, "--stdio"] };
+      }
+      return null;
+    }
     if (spec.command === "demo") return { command: process.execPath, args: [DEMO_SERVER] };
     return { command: resolveCommand(spec.command), args: spec.args ?? [] };
   }
