@@ -4,6 +4,7 @@ import { icons, fileColor } from "./icons";
 import { showInputBox } from "./palette";
 import { pickFolder } from "./folderpicker";
 import { toast } from "./toast";
+import { showContextMenu, type MenuItem } from "./contextmenu";
 
 export class FileTree {
   private root: HTMLElement;
@@ -11,7 +12,6 @@ export class FileTree {
   private rows = new Map<string, HTMLElement>();
   private activePath: string | null = null;
   private selected: { path: string; type: "file" | "dir" } | null = null;
-  private menu: HTMLElement | null = null;
 
   constructor(private el: HTMLElement, private onOpen: (path: string) => void) {
     this.el.innerHTML = "";
@@ -117,43 +117,23 @@ export class FileTree {
   private openMenu(event: MouseEvent, entry: DirEntry): void {
     event.preventDefault();
     event.stopPropagation();
-    this.closeMenu();
-    const menu = document.createElement("div");
-    menu.className = "tree-menu";
-    menu.style.left = `${event.clientX}px`;
-    menu.style.top = `${event.clientY}px`;
-
-    const add = (label: string, icon: string, run: () => void) => {
-      const item = document.createElement("div");
-      item.className = "tree-menu-item";
-      item.innerHTML = `${icon}<span>${label}</span>`;
-      item.onclick = (click) => {
-        click.stopPropagation();
-        this.closeMenu();
-        run();
-      };
-      menu.append(item);
-    };
-
+    const items: MenuItem[] = [];
     if (entry.type === "dir") {
-      add("New File…", icons.newFile, () => this.create("file", entry.path));
-      add("New Folder…", icons.newFolder, () => this.create("dir", entry.path));
-      const separator = document.createElement("div");
-      separator.className = "tree-menu-sep";
-      menu.append(separator);
+      items.push({
+        label: "New File…",
+        icon: icons.newFile,
+        run: () => this.create("file", entry.path),
+      });
+      items.push({
+        label: "New Folder…",
+        icon: icons.newFolder,
+        run: () => this.create("dir", entry.path),
+      });
+      items.push({ separator: true });
     }
-    add("Rename…", icons.rename, () => this.rename(entry));
-    add("Delete", icons.trash, () => this.remove(entry));
-
-    document.body.append(menu);
-    this.menu = menu;
-    const close = () => this.closeMenu();
-    setTimeout(() => document.addEventListener("mousedown", close, { once: true }), 0);
-  }
-
-  private closeMenu(): void {
-    this.menu?.remove();
-    this.menu = null;
+    items.push({ label: "Rename…", icon: icons.rename, run: () => this.rename(entry) });
+    items.push({ label: "Delete", icon: icons.trash, run: () => this.remove(entry) });
+    showContextMenu(event.clientX, event.clientY, items);
   }
 
   private async renderInto(path: string, container: HTMLElement, depth: number): Promise<void> {

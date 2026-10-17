@@ -1,9 +1,8 @@
 import type { EditorManager } from "./editor";
 import { icons, fileColor } from "./icons";
+import { showContextMenu, type MenuItem } from "./contextmenu";
 
 export class TabsView {
-  private menu: HTMLElement | null = null;
-
   constructor(private el: HTMLElement, private editor: EditorManager) {
     editor.onDidChange(() => this.render());
 
@@ -81,47 +80,16 @@ export class TabsView {
 
   private openMenu(event: MouseEvent, path?: string): void {
     event.preventDefault();
-    this.closeMenu();
-    const menu = document.createElement("div");
-    menu.className = "tree-menu";
-    menu.style.left = `${Math.min(event.clientX, window.innerWidth - 190)}px`;
-    menu.style.top = `${Math.min(event.clientY, window.innerHeight - 180)}px`;
-
-    const add = (label: string, run: () => void) => {
-      const item = document.createElement("div");
-      item.className = "tree-menu-item";
-      item.textContent = label;
-      item.onclick = (click) => {
-        click.stopPropagation();
-        this.closeMenu();
-        run();
-      };
-      menu.append(item);
-    };
-    const separator = () => {
-      const sep = document.createElement("div");
-      sep.className = "tree-menu-sep";
-      menu.append(sep);
-    };
-
+    const items: MenuItem[] = [];
     if (path) {
-      add("Close", () => this.editor.close(path));
-      add("Close Others", () => this.closeOthers(path));
-      add("Close to the Right", () => this.closeToRight(path));
-      separator();
+      items.push({ label: "Close", run: () => this.editor.close(path) });
+      items.push({ label: "Close Others", run: () => this.closeOthers(path) });
+      items.push({ label: "Close to the Right", run: () => this.closeToRight(path) });
+      items.push({ separator: true });
     }
-    add("Close Saved", () => this.closeSaved());
-    add("Close All", () => this.closeAll());
-
-    document.body.append(menu);
-    this.menu = menu;
-    const close = () => this.closeMenu();
-    setTimeout(() => document.addEventListener("mousedown", close, { once: true }), 0);
-  }
-
-  private closeMenu(): void {
-    this.menu?.remove();
-    this.menu = null;
+    items.push({ label: "Close Saved", run: () => this.closeSaved() });
+    items.push({ label: "Close All", run: () => this.closeAll() });
+    showContextMenu(event.clientX, event.clientY, items);
   }
 
   private closeOthers(keep: string): void {

@@ -12,7 +12,15 @@ import {
   crosshairCursor,
   hoverTooltip,
 } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentWithTab,
+  redo,
+  selectAll,
+  undo,
+} from "@codemirror/commands";
 import {
   indentOnInput,
   bracketMatching,
@@ -187,6 +195,47 @@ export class EditorManager {
     }
     if (update.selectionSet || update.docChanged) {
       bus.emit("editor.selection", { path, selection: selectionOf(update.state) });
+    }
+  }
+
+  undo(): void {
+    undo(this.view);
+  }
+
+  redo(): void {
+    redo(this.view);
+  }
+
+  selectAll(): void {
+    selectAll(this.view);
+  }
+
+  copySelection(): void {
+    const { from, to } = this.view.state.selection.main;
+    const text = this.view.state.sliceDoc(from, to);
+    if (text && navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => undefined);
+    }
+  }
+
+  cutSelection(): void {
+    const { from, to } = this.view.state.selection.main;
+    const text = this.view.state.sliceDoc(from, to);
+    if (text && navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => undefined);
+    }
+    if (!this.view.state.selection.main.empty) {
+      this.view.dispatch(this.view.state.replaceSelection(""));
+    }
+  }
+
+  async paste(): Promise<void> {
+    try {
+      if (!navigator.clipboard) return;
+      const text = await navigator.clipboard.readText();
+      if (text) this.view.dispatch(this.view.state.replaceSelection(text));
+    } catch {
+      /* clipboard unavailable */
     }
   }
 

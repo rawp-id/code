@@ -16,6 +16,7 @@ import { isNativePlatform, KodeServer } from "./native";
 import { TerminalPanel } from "./terminal";
 import { toast } from "./toast";
 import { disableInputAssistance } from "./inputs";
+import { showContextMenu } from "./contextmenu";
 import { loadSession, saveSession } from "./session";
 
 const root = document.getElementById("root");
@@ -50,6 +51,22 @@ const search = new SearchView(searchEl, (path, line, column) =>
   editor.openAt(path, line, column).catch((error: any) => toast("error", error?.message))
 );
 const settingsView = new SettingsView(settingsEl, (settings) => applySettings(settings));
+
+layout.editorHost.addEventListener("contextmenu", (event) => {
+  if (!(event.target as HTMLElement).closest(".cm-editor")) return;
+  event.preventDefault();
+  showContextMenu(event.clientX, event.clientY, [
+    { label: "Undo", run: () => editor.undo() },
+    { label: "Redo", run: () => editor.redo() },
+    { separator: true },
+    { label: "Cut", run: () => editor.cutSelection() },
+    { label: "Copy", run: () => editor.copySelection() },
+    { label: "Paste", run: () => editor.paste() },
+    { separator: true },
+    { label: "Select All", run: () => editor.selectAll() },
+    { label: "Command Palette", run: () => palette.open() },
+  ]);
+});
 
 let activeView: "files" | "search" | "extensions" | "settings" = "files";
 let panelView: "terminal" | "output" = "terminal";

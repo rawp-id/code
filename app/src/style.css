@@ -1037,6 +1037,16 @@ body {
   color: var(--fg);
 }
 
+.cm-gutters {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.tree-menu-item.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .cm-hover {
   padding: 6px 8px;
   font-family: var(--mono);
