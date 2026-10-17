@@ -15,13 +15,18 @@ export function languageFor(filePath: string): LanguageSpec {
   const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
   switch (ext) {
     case ".ts":
-    case ".tsx":
       return { languageId: "typescript", extensions: [javascript({ typescript: true, jsx: true })] };
+    case ".tsx":
+      return {
+        languageId: "typescriptreact",
+        extensions: [javascript({ typescript: true, jsx: true })],
+      };
     case ".js":
-    case ".jsx":
     case ".mjs":
     case ".cjs":
       return { languageId: "javascript", extensions: [javascript({ jsx: true })] };
+    case ".jsx":
+      return { languageId: "javascriptreact", extensions: [javascript({ jsx: true })] };
     case ".json":
       return { languageId: "json", extensions: [json()] };
     case ".html":

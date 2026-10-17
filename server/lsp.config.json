@@ -1,3 +1,14 @@
 {
-  "*": { "command": "demo" }
+  "*": { "command": "demo" },
+  "json": { "command": "vscode-json-language-server", "args": ["--stdio"] },
+  "jsonc": { "command": "vscode-json-language-server", "args": ["--stdio"] },
+  "html": { "command": "vscode-html-language-server", "args": ["--stdio"] },
+  "css": { "command": "vscode-css-language-server", "args": ["--stdio"] },
+  "scss": { "command": "vscode-css-language-server", "args": ["--stdio"] },
+  "less": { "command": "vscode-css-language-server", "args": ["--stdio"] },
+  "typescript": { "command": "typescript-language-server", "args": ["--stdio"] },
+  "typescriptreact": { "command": "typescript-language-server", "args": ["--stdio"] },
+  "javascript": { "command": "typescript-language-server", "args": ["--stdio"] },
+  "javascriptreact": { "command": "typescript-language-server", "args": ["--stdio"] },
+  "markdown": { "command": "vscode-markdown-language-server", "args": ["--stdio"] }
 }

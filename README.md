@@ -138,6 +138,17 @@ leave the shell's own prompt untouched. `PS2`, `PROMPT_COMMAND`, `BASH_ENV` and
 
 ## Language servers
 
+The server ships real language servers and resolves their binaries from
+`node_modules/.bin`:
+
+| Language | Server |
+| --- | --- |
+| JSON / JSONC | `vscode-json-language-server` |
+| HTML | `vscode-html-language-server` |
+| CSS / SCSS / Less | `vscode-css-language-server` |
+| TypeScript / JavaScript / TSX / JSX | `typescript-language-server` (tsserver) |
+| Markdown | `vscode-markdown-language-server` |
+
 `lsp.config.json` maps a language id to a server command. It is merged from the
 workspace root and the server package root, so a workspace can override the
 defaults. `"*"` is the fallback and `"demo"` selects the bundled demo server.
@@ -150,10 +161,13 @@ defaults. `"*"` is the fallback and `"demo"` selects the bundled demo server.
 }
 ```
 
-See `server/lsp.config.example.json` for more. A server is started lazily the
-first time a document of that language is opened. If the command cannot be
-spawned the failure is reported and the editor keeps working. Use
-**LSP: Show Server Config** from the palette to inspect the merged config.
+See `server/lsp.config.example.json` for more (Python, Rust, Go, YAML, Bash).
+Servers are started lazily the first time a document of that language is
+opened, one process per distinct command (so TS and JS share tsserver). The
+client answers server→client requests (`workspace/configuration`,
+`client/registerCapability`, …) and matches the server's text sync mode. If a
+command cannot be spawned the failure is reported and the editor keeps working.
+Use **LSP: Show Server Config** from the palette to inspect the merged config.
 
 ## Android (Capacitor)
 
