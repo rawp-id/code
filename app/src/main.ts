@@ -18,6 +18,7 @@ import { toast } from "./toast";
 import { disableInputAssistance } from "./inputs";
 import { showContextMenu } from "./contextmenu";
 import { loadSession, saveSession } from "./session";
+import { clientLsp } from "./worker/client-lsp";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root");
@@ -378,6 +379,7 @@ const fromUri = (uri: string) => uri.replace(/^file:\/\//, "");
 
 bus.on("editor.open", ({ path, languageId, text }) => {
   const uri = toUri(path);
+  clientLsp.didOpen(uri, languageId, text);
   bridge.request("doc.open", { uri, languageId, text });
   bridge.request("lsp.didOpen", { uri, languageId, text });
 });
@@ -397,6 +399,7 @@ bus.on("editor.change", ({ path, text }) => {
   changeTimer = window.setTimeout(() => {
     for (const [changedPath, changedText] of pendingChanges) {
       const uri = toUri(changedPath);
+      clientLsp.didChange(uri, changedText);
       bridge.request("doc.change", { uri, text: changedText });
       bridge.request("lsp.didChange", { uri, text: changedText });
     }
@@ -407,6 +410,7 @@ bus.on("editor.saved", ({ path }) => bridge.request("doc.save", { uri: toUri(pat
 bus.on("editor.active", ({ path }) => bridge.request("doc.active", { uri: toUri(path) }));
 bus.on("editor.close", ({ path }) => {
   const uri = toUri(path);
+  clientLsp.didClose(uri);
   bridge.request("doc.close", { uri });
   bridge.request("lsp.didClose", { uri });
 });

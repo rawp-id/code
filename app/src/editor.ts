@@ -43,6 +43,7 @@ import { bridge } from "./bridge";
 import { bus } from "./bus";
 import { languageFor } from "./lang";
 import { editorBaseTheme, refreshHighlighting, setShikiTheme, shikiHighlighting } from "./highlight";
+import { clientLsp } from "./worker/client-lsp";
 
 export interface OpenDoc {
   path: string;
@@ -116,9 +117,14 @@ export class EditorManager {
   private prefs: EditorPrefs = { ...DEFAULT_PREFS };
   private docs = new Map<string, OpenDoc>();
   private listeners = new Set<() => void>();
-  private diagnostics: { lsp: Map<string, any[]>; ext: Map<string, any[]> } = {
+  private diagnostics: {
+    lsp: Map<string, any[]>;
+    ext: Map<string, any[]>;
+    client: Map<string, any[]>;
+  } = {
     lsp: new Map(),
     ext: new Map(),
+    client: new Map(),
   };
   active: string | null = null;
 
@@ -129,6 +135,9 @@ export class EditorManager {
     );
     bridge.on("ext.diagnostics", (params) =>
       this.applyDiagnostics(params.uri, params.diagnostics, "ext")
+    );
+    clientLsp.onDiagnostics((uri, diagnostics) =>
+      this.applyDiagnostics(uri, diagnostics, "client")
     );
   }
 
@@ -456,9 +465,10 @@ export class EditorManager {
     const position = { line: line.number - 1, character: context.pos - line.from };
     const uri = "file://" + path;
 
-    const [lspItems, extItems] = await Promise.all([
+    const [lspItems, extItems, clientItems] = await Promise.all([
       bridge.request<any[]>("lsp.completion", { uri, position }).catch(() => []),
       bridge.request<any[]>("ext.completion", { uri, position }).catch(() => []),
+      clientLsp.completion(uri, position).catch(() => []),
     ]);
 
     const seen = new Set<string>();
@@ -521,7 +531,11 @@ export class EditorManager {
       });
     };
 
-    for (const item of [...(lspItems || []), ...(extItems || [])]) {
+    for (const item of [
+      ...(lspItems || []),
+      ...(extItems || []),
+      ...(clientItems || []),
+    ]) {
       addOption(
         item?.label,
         item?.kind,
@@ -574,11 +588,16 @@ export class EditorManager {
       const line = view.state.doc.lineAt(pos);
       const position = { line: line.number - 1, character: pos - line.from };
       const uri = "file://" + path;
-      const [ext, lsp] = await Promise.all([
+      const [ext, lsp, client] = await Promise.all([
         bridge.request<any>("ext.hover", { uri, position }).catch(() => null),
         bridge.request<any>("lsp.hover", { uri, position }).catch(() => null),
+        clientLsp.hover(uri, position).catch(() => null),
       ]);
-      const parts = [hoverContents(lsp?.contents), ext?.contents].filter(Boolean) as string[];
+      const parts = [
+        hoverContents(lsp?.contents),
+        hoverContents(client?.contents),
+        ext?.contents,
+      ].filter(Boolean) as string[];
       const text = parts.join("\n\n");
       if (!text) return null;
       return {
@@ -593,7 +612,7 @@ export class EditorManager {
     });
   }
 
-  private applyDiagnostics(uri: string, diagnostics: any[], source: "lsp" | "ext"): void {
+  private applyDiagnostics(uri: string, diagnostics: any[], source: "lsp" | "ext" | "client"): void {
     const path = uri.replace(/^file:\/\//, "");
     this.diagnostics[source].set(path, diagnostics || []);
     const docPath = [...this.docs.keys()].find((p) => p === path || path.endsWith("/" + p));
@@ -604,6 +623,7 @@ export class EditorManager {
     const combined = [
       ...(this.diagnostics.lsp.get(path) || []),
       ...(this.diagnostics.ext.get(path) || []),
+      ...(this.diagnostics.client.get(path) || []),
     ];
     const converted: Diagnostic[] = combined.map((item: any) => {
       const from = offsetOf(state, item.range.start);
