@@ -1591,3 +1591,149 @@ body {
   overflow: auto;
   white-space: pre;
 }
+
+/* ------------------------------------------------------------------ *
+ * Touch devices (mobile / tablet, no mouse).
+ * Bigger targets, more breathing room, and hover-only affordances
+ * (like the explorer's add file/folder buttons) are always visible.
+ * ------------------------------------------------------------------ */
+@media (pointer: coarse) {
+  /* Activity bar */
+  .activitybar {
+    padding: 10px 0;
+    gap: 10px;
+  }
+  .activitybar button {
+    width: 48px;
+    height: 48px;
+  }
+  .activitybar button svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* Sidebar header */
+  .sidebar-head {
+    min-height: 46px;
+    padding: 0 8px 0 14px;
+  }
+  .sidebar-action {
+    width: 36px;
+    height: 36px;
+  }
+  .sidebar-action svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Explorer tree */
+  .tree-row {
+    min-height: 38px;
+    padding: 5px 12px;
+    gap: 8px;
+  }
+  .tree-chevron,
+  .tree-chevron svg {
+    width: 18px;
+    height: 18px;
+    flex-basis: 18px;
+  }
+  .tree-icon {
+    flex-basis: 22px;
+  }
+  .tree-icon svg,
+  .tree-icon img {
+    width: 22px;
+    height: 22px;
+  }
+  .tree-label {
+    font-size: 14px;
+    padding-right: 84px; /* keep room for the always-visible add buttons */
+  }
+  .tree-row-actions {
+    display: flex;
+    right: 8px;
+    gap: 6px;
+    padding-left: 0;
+    background: none;
+  }
+  .tree-row-action {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+  }
+  .tree-row-action svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Tabs */
+  .tabs {
+    min-height: 44px;
+  }
+  .tab {
+    height: 44px;
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .tab .close {
+    padding: 6px;
+  }
+  .tab .close svg {
+    width: 16px;
+    height: 16px;
+  }
+  .tab-icon,
+  .tab-icon svg {
+    flex-basis: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Panel (terminal / problems / output) */
+  .panel-head {
+    height: 42px;
+    gap: 20px;
+    font-size: 12px;
+  }
+  .panel-head .close {
+    padding: 8px;
+  }
+  .panel-head .close svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Context menu */
+  .tree-menu {
+    min-width: 200px;
+  }
+  .tree-menu-item {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+  .tree-menu-item svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Command palette */
+  .palette-item {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+  .palette input {
+    padding: 12px;
+    font-size: 16px;
+  }
+
+  /* Inputs: 16px avoids iOS Safari's auto-zoom on focus */
+  input[type="text"],
+  input[type="number"],
+  input[type="search"],
+  input[type="password"],
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
