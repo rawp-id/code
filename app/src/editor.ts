@@ -33,6 +33,7 @@ import {
   closeBrackets,
   closeBracketsKeymap,
   completionKeymap,
+  snippet,
   startCompletion,
   type Completion,
   type CompletionContext,
@@ -52,17 +53,31 @@ export interface OpenDoc {
 }
 
 const LSP_KIND: Record<number, string> = {
-  2: "function",
+  1: "text",
+  2: "method",
   3: "function",
-  5: "variable",
-  6: "class",
-  7: "interface",
-  8: "namespace",
-  9: "property",
+  4: "function",
+  5: "property",
+  6: "variable",
+  7: "class",
+  8: "interface",
+  9: "namespace",
+  10: "property",
+  11: "text",
+  12: "constant",
+  13: "enum",
   14: "keyword",
-  15: "constant",
-  16: "text",
+  15: "snippet",
+  16: "color",
+  17: "file",
+  18: "reference",
+  19: "folder",
+  20: "enum",
   21: "constant",
+  22: "class",
+  23: "event",
+  24: "operator",
+  25: "type",
 };
 
 const fontCompartment = new Compartment();
@@ -414,9 +429,12 @@ export class EditorManager {
 
   applyEdits(uri: string, edits: any[]): boolean {
     const path = uri.replace(/^file:\/\//, "");
-    if (!this.docs.has(path)) return false;
-    if (this.active !== path) this.activate(path);
-    const state = this.view.state;
+    const docPath = [...this.docs.keys()].find((p) => p === path || path.endsWith("/" + p));
+    if (!docPath) return false;
+    if (this.active !== docPath) this.activate(docPath);
+    const doc = this.docs.get(docPath);
+    if (!doc) return false;
+    const state = doc.state;
     const changes = (edits || [])
       .map((edit) => ({
         from: offsetOf(state, edit.range.start),
@@ -445,19 +463,79 @@ export class EditorManager {
 
     const seen = new Set<string>();
     const options: Completion[] = [];
-    const add = (label: unknown, type: string, detail?: unknown) => {
-      if (typeof label !== "string" || !label || seen.has(label)) return;
+
+    const addOption = (
+      rawLabel: unknown,
+      kind: number | undefined,
+      rawDetail: unknown,
+      rawDoc: unknown,
+      rawInsert: unknown,
+      insertTextFormat: number | undefined,
+      boost: number
+    ) => {
+      const label =
+        typeof rawLabel === "string"
+          ? rawLabel
+          : rawLabel && typeof rawLabel === "object" && "label" in rawLabel
+            ? String((rawLabel as any).label)
+            : "";
+      if (!label || seen.has(label)) return;
       seen.add(label);
-      options.push({ label, type, detail: typeof detail === "string" ? detail : undefined });
+
+      let detail: string | undefined;
+      if (typeof rawDetail === "string") {
+        detail = rawDetail;
+      } else if (rawLabel && typeof rawLabel === "object" && "detail" in rawLabel) {
+        detail = String((rawLabel as any).detail);
+      }
+
+      let info: string | undefined;
+      if (typeof rawDoc === "string") {
+        info = rawDoc;
+      } else if (rawDoc && typeof rawDoc === "object" && "value" in rawDoc) {
+        info = String((rawDoc as any).value);
+      }
+
+      let apply: any = undefined;
+      if (typeof rawInsert === "string" && rawInsert.length > 0) {
+        if (insertTextFormat === 2 || /\$\{\d+:?[^}]*\}|\$\d/.test(rawInsert)) {
+          try {
+            apply = snippet(rawInsert);
+          } catch {
+            apply = rawInsert;
+          }
+        } else {
+          apply = rawInsert;
+        }
+      }
+
+      const type = kind !== undefined && LSP_KIND[kind] ? LSP_KIND[kind] : "text";
+
+      options.push({
+        label,
+        type,
+        detail,
+        info,
+        apply,
+        boost,
+      });
     };
 
     for (const item of [...(lspItems || []), ...(extItems || [])]) {
-      add(item?.label, LSP_KIND[item?.kind] || "text", item?.detail);
+      addOption(
+        item?.label,
+        item?.kind,
+        item?.detail,
+        item?.documentation,
+        item?.insertText,
+        item?.insertTextFormat,
+        99
+      );
     }
     // VS Code-style word based suggestions, so Ctrl+Space is useful in every
     // language (these come from the open documents, never faked keywords).
     for (const candidate of this.wordsMatching(path, prefix, context.explicit)) {
-      add(candidate, "text");
+      addOption(candidate, undefined, undefined, undefined, undefined, undefined, 0);
     }
 
     if (options.length === 0) return null;
@@ -518,8 +596,11 @@ export class EditorManager {
   private applyDiagnostics(uri: string, diagnostics: any[], source: "lsp" | "ext"): void {
     const path = uri.replace(/^file:\/\//, "");
     this.diagnostics[source].set(path, diagnostics || []);
-    if (this.active !== path || !this.docs.has(path)) return;
-    const state = this.view.state;
+    const docPath = [...this.docs.keys()].find((p) => p === path || path.endsWith("/" + p));
+    if (!docPath || this.active !== docPath) return;
+    const doc = this.docs.get(docPath);
+    if (!doc) return;
+    const state = doc.state;
     const combined = [
       ...(this.diagnostics.lsp.get(path) || []),
       ...(this.diagnostics.ext.get(path) || []),

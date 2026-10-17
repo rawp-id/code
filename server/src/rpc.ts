@@ -4,6 +4,7 @@ import type { WebSocket } from "ws";
 import { Workspace } from "./workspace.js";
 import { PtyManager } from "./pty.js";
 import { ExtensionHost, type UiBridge } from "./ext-host/host.js";
+import { pathToUri } from "./ext-host/documents.js";
 import { installVsix, uninstallExtension } from "./ext-host/installer.js";
 import { searchMarketplace, getMarketplaceDetail, type Registry } from "./ext-host/marketplace.js";
 import { LspManager } from "./lsp/manager.js";
@@ -31,7 +32,11 @@ export function handleConnection(ws: WebSocket): void {
   let clientSeq = 1;
 
   const send = (message: unknown) => {
-    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
+    try {
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
+    } catch {
+      /* ignore socket send failures */
+    }
   };
   const event = (name: string, data?: unknown) => send({ event: name, data });
 
@@ -79,6 +84,15 @@ export function handleConnection(ws: WebSocket): void {
     return typeof prompt === "string" ? { PS1: prompt } : {};
   };
 
+  const normalizeUri = (uri: string) => {
+    if (!uri) return "";
+    let clean = uri.replace(/^file:\/\//, "");
+    if (!path.isAbsolute(clean)) {
+      clean = path.resolve(workspace.root, clean);
+    }
+    return pathToUri(clean);
+  };
+
   const methods: Record<string, (params: any) => any> = {
     "server.info": async () => {
       await pty.probe();
@@ -119,28 +133,30 @@ export function handleConnection(ws: WebSocket): void {
     },
     "fs.listDirs": ({ path: dir }: { path?: string }) => listDirectories(dir),
 
-    "doc.open": ({ uri, languageId, text }: { uri: string; languageId: string; text: string }) => {
-      host.openDocument(uri, languageId, text);
+    "doc.open": async ({ uri, languageId, text }: { uri: string; languageId: string; text: string }) => {
+      const u = normalizeUri(uri);
+      host.openDocument(u, languageId, text);
+      await host.activateForLanguage(languageId);
       return true;
     },
     "doc.change": ({ uri, text }: { uri: string; text: string }) => {
-      host.changeDocument(uri, text);
+      host.changeDocument(normalizeUri(uri), text);
       return true;
     },
     "doc.save": ({ uri }: { uri: string }) => {
-      host.saveDocument(uri);
+      host.saveDocument(normalizeUri(uri));
       return true;
     },
     "doc.close": ({ uri }: { uri: string }) => {
-      host.closeDocument(uri);
+      host.closeDocument(normalizeUri(uri));
       return true;
     },
     "doc.active": ({ uri }: { uri: string }) => {
-      host.setActiveDocument(uri);
+      host.setActiveDocument(normalizeUri(uri));
       return true;
     },
     "doc.selection": ({ uri, selection }: any) => {
-      host.setSelection(uri, selection);
+      host.setSelection(normalizeUri(uri), selection);
       return true;
     },
     "doc.list": () =>
@@ -188,8 +204,10 @@ export function handleConnection(ws: WebSocket): void {
       })),
     "ext.execCommand": ({ command, args }: { command: string; args?: any[] }) =>
       host.executeCommand(command, args || []),
-    "ext.completion": ({ uri, position }: any) => host.provideCompletionItems(uri, position),
-    "ext.hover": ({ uri, position }: any) => host.provideHover(uri, position),
+    "ext.completion": ({ uri, position }: any) =>
+      host.provideCompletionItems(normalizeUri(uri), position),
+    "ext.hover": ({ uri, position }: any) =>
+      host.provideHover(normalizeUri(uri), position),
     "ext.installVsix": async ({ path: filePath, url }: { path?: string; url?: string }) => {
       const info = await installVsix(EXTENSIONS_DIR, { path: filePath, url });
       host.markUnscanned();
@@ -240,13 +258,20 @@ export function handleConnection(ws: WebSocket): void {
     "ext.iconThemeData": ({ extensionId, path: themePath }: any) =>
       host.readIconTheme(extensionId, themePath),
 
-    "lsp.didOpen": ({ uri, languageId, text }: any) => lsp.didOpen(uri, languageId, text),
-    "lsp.didChange": ({ uri, text }: any) => lsp.didChange(uri, text),
-    "lsp.didClose": ({ uri }: any) => lsp.didClose(uri),
-    "lsp.completion": ({ uri, position }: any) => lsp.completion(uri, position),
-    "lsp.hover": ({ uri, position }: any) =>
-      lsp.request(uri, "textDocument/hover", { textDocument: { uri }, position }).catch(() => null),
-    "lsp.request": ({ uri, method, params }: any) => lsp.request(uri, method, params),
+    "lsp.didOpen": ({ uri, languageId, text }: any) =>
+      lsp.didOpen(normalizeUri(uri), languageId, text),
+    "lsp.didChange": ({ uri, text }: any) =>
+      lsp.didChange(normalizeUri(uri), text),
+    "lsp.didClose": ({ uri }: any) =>
+      lsp.didClose(normalizeUri(uri)),
+    "lsp.completion": ({ uri, position }: any) =>
+      lsp.completion(normalizeUri(uri), position),
+    "lsp.hover": ({ uri, position }: any) => {
+      const u = normalizeUri(uri);
+      return lsp.request(u, "textDocument/hover", { textDocument: { uri: u }, position }).catch(() => null);
+    },
+    "lsp.request": ({ uri, method, params }: any) =>
+      lsp.request(normalizeUri(uri), method, params),
     "lsp.config": () => lsp.loadConfig(),
   };
 

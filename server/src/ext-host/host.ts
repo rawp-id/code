@@ -1,7 +1,16 @@
-import { promises as fs, readFileSync } from "node:fs";
+import { existsSync, promises as fs, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { createRequire } from "node:module";
+
+function resolveMain(dir: string, main?: string): string {
+  const p = path.resolve(dir, main || "./extension.js");
+  const candidates = [p, p + ".js", p + ".cjs", p + ".mjs", path.join(p, "index.js")];
+  for (const c of candidates) {
+    if (existsSync(c) && statSync(c).isFile()) return c;
+  }
+  return p;
+}
 import {
   TextDocumentImpl,
   TextEditorImpl,
@@ -57,15 +66,30 @@ export interface UiBridge {
 }
 
 class Emitter {
-  private listeners = new Set<(event: any) => void>();
+  private listeners = new Set<{ fn: (event: any) => void; thisArgs?: any }>();
 
-  event = (listener: (event: any) => void) => {
-    this.listeners.add(listener);
-    return { dispose: () => this.listeners.delete(listener) };
+  event = (listener: (event: any) => void, thisArgs?: any, disposables?: any[]) => {
+    const entry = { fn: listener, thisArgs };
+    this.listeners.add(entry);
+    const disposable = {
+      dispose: () => {
+        this.listeners.delete(entry);
+      },
+    };
+    if (Array.isArray(disposables)) {
+      disposables.push(disposable);
+    }
+    return disposable;
   };
 
   fire(value?: any): void {
-    for (const listener of [...this.listeners]) listener(value);
+    for (const { fn, thisArgs } of [...this.listeners]) {
+      try {
+        fn.call(thisArgs, value);
+      } catch (err: any) {
+        // Prevent extension listeners from crashing the host
+      }
+    }
   }
 
   clear(): void {
@@ -85,6 +109,7 @@ class Memento {
   keys(): string[] {
     return [...this.data.keys()];
   }
+  setKeysForSync(_keys: readonly string[]): void {}
 }
 
 class WorkspaceEdit {
@@ -233,8 +258,7 @@ export class ExtensionHost {
     if (!ext || this.disabled.has(id)) return this.list().find((e) => e.id === id) || null;
     if (this.activated.has(id)) return this.list().find((e) => e.id === id) || null;
 
-    const mainRel = ext.main || "./extension.js";
-    const mainPath = path.join(ext.dir, mainRel);
+    const mainPath = resolveMain(ext.dir, ext.main);
     const context = this.createContext(ext);
     const vscode = this.createShim(ext, context);
     this.contexts.set(id, context);
@@ -357,9 +381,39 @@ export class ExtensionHost {
     }
   }
 
+  /** Activate extensions registered for a language. */
+  async activateForLanguage(languageId: string): Promise<void> {
+    if (!languageId || languageId === "plaintext") return;
+    if (!this.scanned) await this.scan();
+    for (const ext of this.extensions.values()) {
+      if (this.disabled.has(ext.id) || this.activated.has(ext.id)) continue;
+      const events: string[] = ext.manifest?.activationEvents || [];
+      const contributesLangs = (ext.manifest?.contributes?.languages || []).some(
+        (l: any) => l.id === languageId
+      );
+      if (
+        events.includes("*") ||
+        events.includes("onStartupFinished") ||
+        events.includes(`onLanguage:${languageId}`) ||
+        events.includes("onLanguage:*") ||
+        contributesLangs
+      ) {
+        try {
+          await this.activate(ext.id);
+        } catch (error: any) {
+          this.ui.output(
+            "Extension Host",
+            `failed to activate ${ext.id} for ${languageId}: ${error?.message}`
+          );
+        }
+      }
+    }
+  }
+
   // ---- document model -----------------------------------------------------
 
   openDocument(uri: string, languageId: string, text: string): void {
+    void this.activateForLanguage(languageId);
     let entry = this.documents.get(uri);
     if (entry) {
       entry.text = text;
@@ -588,8 +642,18 @@ export class ExtensionHost {
     uri: string,
     position: { line: number; character: number }
   ): Promise<any[]> {
-    const entry = this.documents.get(uri);
+    let entry = this.documents.get(uri);
+    if (!entry) {
+      try {
+        const text = await fs.readFile(uriToPath(uri), "utf8");
+        this.openDocument(uri, languageForPath(uriToPath(uri)), text);
+        entry = this.documents.get(uri);
+      } catch {
+        return [];
+      }
+    }
     if (!entry) return [];
+    await this.activateForLanguage(entry.languageId);
     const document = this.makeDocument(entry);
     const results: any[] = [];
     for (const { selector, provider } of this.completionProviders) {
@@ -599,7 +663,7 @@ export class ExtensionHost {
           document,
           position,
           cancellationToken(),
-          { triggerKind: 1, triggerCharacter: undefined }
+          { triggerKind: 0, triggerCharacter: undefined }
         );
         const items = Array.isArray(list) ? list : list?.items || [];
         for (const item of items) results.push(normalizeCompletionItem(item));
@@ -614,8 +678,18 @@ export class ExtensionHost {
     uri: string,
     position: { line: number; character: number }
   ): Promise<{ contents: string; range?: Range } | null> {
-    const entry = this.documents.get(uri);
+    let entry = this.documents.get(uri);
+    if (!entry) {
+      try {
+        const text = await fs.readFile(uriToPath(uri), "utf8");
+        this.openDocument(uri, languageForPath(uriToPath(uri)), text);
+        entry = this.documents.get(uri);
+      } catch {
+        return null;
+      }
+    }
     if (!entry) return null;
+    await this.activateForLanguage(entry.languageId);
     const document = this.makeDocument(entry);
     for (const { selector, provider } of this.hoverProviders) {
       if (!matchesSelector(selector, document.languageId) || !provider?.provideHover) continue;
@@ -684,7 +758,7 @@ export class ExtensionHost {
     );
   }
 
-  private createContext(ext: ExtensionInfo & { dir: string }) {
+  private createContext(ext: ExtensionInfo & { dir: string; manifest?: any }) {
     const subscriptions: { dispose(): void }[] = [];
     return {
       subscriptions,
@@ -708,6 +782,14 @@ export class ExtensionHost {
         clear: () => {},
       },
       extensionMode: 2,
+      extension: {
+        id: ext.id,
+        extensionPath: ext.dir,
+        extensionUri: uriFromPath(ext.dir),
+        packageJSON: ext.manifest,
+        isActive: true,
+        exports: undefined,
+      },
     };
   }
 
@@ -727,6 +809,134 @@ export class ExtensionHost {
         return { range: toRange(range), newText: "" };
       }
     };
+
+    class CodeActionKind {
+      static readonly Empty = new CodeActionKind("");
+      static readonly QuickFix = new CodeActionKind("quickfix");
+      static readonly Refactor = new CodeActionKind("refactor");
+      static readonly RefactorExtract = new CodeActionKind("refactor.extract");
+      static readonly RefactorInline = new CodeActionKind("refactor.inline");
+      static readonly RefactorRewrite = new CodeActionKind("refactor.rewrite");
+      static readonly Source = new CodeActionKind("source");
+      static readonly SourceOrganizeImports = new CodeActionKind("source.organizeImports");
+      static readonly SourceFixAll = new CodeActionKind("source.fixAll");
+      constructor(public readonly value: string) {}
+      append(parts: string): CodeActionKind {
+        return new CodeActionKind(this.value ? `${this.value}.${parts}` : parts);
+      }
+      intersects(other: CodeActionKind): boolean {
+        return this.value.includes(other.value) || other.value.includes(this.value);
+      }
+      contains(other: CodeActionKind): boolean {
+        return this.value === other.value || this.value.startsWith(`${other.value}.`);
+      }
+    }
+
+    class CancellationTokenSource {
+      private _isCancelled = false;
+      private _emitter = new Emitter();
+      get token() {
+        return {
+          isCancellationRequested: this._isCancelled,
+          onCancellationRequested: this._emitter.event,
+        };
+      }
+      cancel() {
+        if (!this._isCancelled) {
+          this._isCancelled = true;
+          this._emitter.fire(undefined);
+        }
+      }
+      dispose() {
+        this._emitter.clear();
+      }
+    }
+
+    class EventEmitter {
+      private _emitter = new Emitter();
+      get event() {
+        return this._emitter.event;
+      }
+      fire(value?: any) {
+        this._emitter.fire(value);
+      }
+      dispose() {
+        this._emitter.clear();
+      }
+    }
+
+    const languagesTarget = {
+      registerCompletionItemProvider(
+        selector: any,
+        provider: any,
+        ..._triggerCharacters: string[]
+      ) {
+        return host.registerProvider(host.completionProviders, context, selector, provider);
+      },
+      registerHoverProvider(selector: any, provider: any) {
+        return host.registerProvider(host.hoverProviders, context, selector, provider);
+      },
+      createDiagnosticCollection(name?: string) {
+        const tracked = new Set<string>();
+        return {
+          name: name || "diagnostics",
+          set(uriOrEntries: any, diagnostics?: any[]) {
+            if (Array.isArray(uriOrEntries)) {
+              for (const [uri, items] of uriOrEntries) {
+                tracked.add(uriKey(uri));
+                host.setExtensionDiagnostics(uriKey(uri), items || []);
+              }
+              return;
+            }
+            const uri = uriKey(uriOrEntries);
+            tracked.add(uri);
+            host.setExtensionDiagnostics(uri, diagnostics || []);
+          },
+          delete(uri: any) {
+            tracked.delete(uriKey(uri));
+            host.setExtensionDiagnostics(uriKey(uri), []);
+          },
+          clear() {
+            for (const uri of tracked) host.setExtensionDiagnostics(uri, []);
+            tracked.clear();
+          },
+          dispose() {
+            this.clear();
+          },
+        };
+      },
+      match(selector: any, document: any): number {
+        if (!document) return 0;
+        return matchesSelector(selector, document.languageId) ? 10 : 0;
+      },
+      setLanguageConfiguration: () => ({ dispose() {} }),
+      getLanguages: async () => [
+        "plaintext",
+        "javascript",
+        "typescript",
+        "php",
+        "python",
+        "html",
+        "css",
+        "json",
+        "markdown",
+        "shellscript",
+        "yaml",
+      ],
+    };
+
+    const languages = new Proxy(languagesTarget, {
+      get(target: any, prop: string | symbol) {
+        if (prop in target) return target[prop];
+        if (
+          typeof prop === "string" &&
+          (prop.startsWith("register") || prop.startsWith("set"))
+        ) {
+          return () => ({ dispose() {} });
+        }
+        return undefined;
+      },
+    });
 
     return {
       version: "1.90.0",
@@ -770,10 +980,24 @@ export class ExtensionHost {
           return outputChannel(name);
         },
         createStatusBarItem() {
-          return { text: "", tooltip: "", command: undefined, show() {}, hide() {}, dispose() {} };
+          return {
+            text: "",
+            tooltip: "",
+            command: undefined,
+            show() {},
+            hide() {},
+            dispose() {},
+          };
         },
+        setStatusBarMessage: () => ({ dispose() {} }),
         withProgress: async (_options: any, task: any) =>
-          task({ report: () => {} }, { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) }),
+          task(
+            { report: () => {} },
+            {
+              isCancellationRequested: false,
+              onCancellationRequested: () => ({ dispose() {} }),
+            }
+          ),
       },
       workspace: {
         get name() {
@@ -793,6 +1017,39 @@ export class ExtensionHost {
         },
         get textDocuments() {
           return host.listDocuments();
+        },
+        get workspaceFile() {
+          return undefined;
+        },
+        getWorkspaceFolder(_uri: any) {
+          return {
+            uri: uriFromPath(host.workspaceRoot),
+            name: path.basename(host.workspaceRoot),
+            index: 0,
+          };
+        },
+        createFileSystemWatcher(
+          _pattern: any,
+          ignoreCreateEvents?: boolean,
+          ignoreChangeEvents?: boolean,
+          ignoreDeleteEvents?: boolean
+        ) {
+          const onDidCreate = new Emitter();
+          const onDidChange = new Emitter();
+          const onDidDelete = new Emitter();
+          return {
+            ignoreCreateEvents: Boolean(ignoreCreateEvents),
+            ignoreChangeEvents: Boolean(ignoreChangeEvents),
+            ignoreDeleteEvents: Boolean(ignoreDeleteEvents),
+            onDidCreate: onDidCreate.event,
+            onDidChange: onDidChange.event,
+            onDidDelete: onDidDelete.event,
+            dispose() {
+              onDidCreate.clear();
+              onDidChange.clear();
+              onDidDelete.clear();
+            },
+          };
         },
         onDidOpenTextDocument: host.emitters.open.event,
         onDidChangeTextDocument: host.emitters.change.event,
@@ -823,7 +1080,12 @@ export class ExtensionHost {
           },
           stat: async (uri: any) => {
             const info = await fs.stat(uriToPath(uriKey(uri)));
-            return { type: info.isDirectory() ? 2 : 1, ctime: info.ctimeMs, mtime: info.mtimeMs, size: info.size };
+            return {
+              type: info.isDirectory() ? 2 : 1,
+              ctime: info.ctimeMs,
+              mtime: info.mtimeMs,
+              size: info.size,
+            };
           },
           readDirectory: async (uri: any) => {
             const entries = await fs.readdir(uriToPath(uriKey(uri)), { withFileTypes: true });
@@ -836,68 +1098,31 @@ export class ExtensionHost {
         applyEdit: (edit: WorkspaceEdit) => host.applyWorkspaceEdit(edit),
         openTextDocument: (uriOrPath: string) => host.openTextDocument(uriOrPath),
         findFiles: async () => [],
+        saveAll: async () => true,
         asRelativePath: (value: any) => {
           const filePath = typeof value === "string" ? value : uriToPath(uriKey(value));
           return path.relative(host.workspaceRoot, filePath);
         },
       },
-      languages: {
-        registerCompletionItemProvider(
-          selector: any,
-          provider: any,
-          ..._triggerCharacters: string[]
-        ) {
-          return host.registerProvider(host.completionProviders, context, selector, provider);
-        },
-        registerHoverProvider(selector: any, provider: any) {
-          return host.registerProvider(host.hoverProviders, context, selector, provider);
-        },
-        registerCodeActionsProvider: () => ({ dispose() {} }),
-        registerDocumentFormattingEditProvider: () => ({ dispose() {} }),
-        createDiagnosticCollection(name?: string) {
-          const tracked = new Set<string>();
-          return {
-            name: name || "diagnostics",
-            set(uriOrEntries: any, diagnostics?: any[]) {
-              if (Array.isArray(uriOrEntries)) {
-                for (const [uri, items] of uriOrEntries) {
-                  tracked.add(uriKey(uri));
-                  host.setExtensionDiagnostics(uriKey(uri), items || []);
-                }
-                return;
-              }
-              const uri = uriKey(uriOrEntries);
-              tracked.add(uri);
-              host.setExtensionDiagnostics(uri, diagnostics || []);
-            },
-            delete(uri: any) {
-              tracked.delete(uriKey(uri));
-              host.setExtensionDiagnostics(uriKey(uri), []);
-            },
-            clear() {
-              for (const uri of tracked) host.setExtensionDiagnostics(uri, []);
-              tracked.clear();
-            },
-            dispose() {
-              this.clear();
-            },
-          };
-        },
-        match: () => 0,
-      },
+      languages,
       extensions: {
         getExtension: (id: string) => {
-          const extension = host.extensions.get(id);
+          const lower = (id || "").toLowerCase();
+          const extension =
+            host.extensions.get(id) ||
+            [...host.extensions.values()].find(
+              (e) => e.id.toLowerCase() === lower || e.name.toLowerCase() === lower
+            );
           if (!extension) return undefined;
           return {
             id: extension.id,
             extensionPath: extension.dir,
             extensionUri: uriFromPath(extension.dir),
             packageJSON: extension.manifest,
-            isActive: host.activated.has(id),
-            exports: host.activatedExports.get(id),
+            isActive: host.activated.has(extension.id),
+            exports: host.activatedExports.get(extension.id),
             extensionKind: 1,
-            activate: () => host.activate(id),
+            activate: () => host.activate(extension.id),
           };
         },
         get all() {
@@ -922,17 +1147,52 @@ export class ExtensionHost {
       },
       Uri: {
         file: (p: string) => uriFromPath(p),
-        parse: (value: string) => ({ toString: () => value, fsPath: value, path: value }),
-        joinPath: (base: any, ...parts: string[]) => uriFromPath(path.join(base.fsPath, ...parts)),
+        parse: (value: string) => {
+          const s = String(value);
+          const isFile = s.startsWith("file://");
+          const filePath = isFile ? uriToPath(s) : s;
+          return {
+            scheme: isFile ? "file" : s.includes(":") ? s.split(":")[0] : "file",
+            fsPath: filePath,
+            path: filePath,
+            authority: "",
+            query: "",
+            fragment: "",
+            toString: () => s,
+          };
+        },
+        joinPath: (base: any, ...parts: string[]) =>
+          uriFromPath(path.join(base.fsPath || base.path, ...parts)),
       },
       ThemeColor: class ThemeColor {
         constructor(public id: string) {}
       },
+      ThemeIcon: class ThemeIcon {
+        constructor(public id: string, public color?: any) {}
+        static readonly File = new ThemeIcon("file");
+        static readonly Folder = new ThemeIcon("folder");
+      },
       StatusBarAlignment: { Left: 1, Right: 2 },
-      ViewColumn: { Active: -1, One: 1, Two: 2 },
-      TextEditorRevealType: { Default: 0, InCenter: 1, AtTop: 2 },
+      ViewColumn: { Active: -1, Beside: -2, One: 1, Two: 2 },
+      TextEditorRevealType: { Default: 0, InCenter: 1, InCenterIfOutsideViewport: 2, AtTop: 3 },
       EndOfLine: { LF: 1, CRLF: 2 },
       ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
+      IndentAction: { None: 0, Block: 1, Indent: 2, IndentOutdent: 3 },
+      ProgressLocation: { SourceControl: 1, Window: 10, Notification: 15 },
+      CodeActionTriggerKind: { Invoke: 1, Automatic: 2 },
+      CodeActionKind,
+      CodeAction: class CodeAction {
+        constructor(public title: string, public kind?: CodeActionKind) {}
+      },
+      CodeLens: class CodeLens {
+        constructor(public range: any, public command?: any) {}
+      },
+      CompletionTriggerKind: {
+        Invoke: 0,
+        TriggerCharacter: 1,
+        TriggerForIncompleteCompletions: 2,
+      },
+      CompletionItemTag: { Deprecated: 1 },
       CompletionItemKind: {
         Text: 0,
         Method: 1,
@@ -944,13 +1204,146 @@ export class ExtensionHost {
         Interface: 7,
         Module: 8,
         Property: 9,
+        Unit: 10,
+        Value: 11,
+        Enum: 12,
         Keyword: 13,
         Snippet: 14,
         Color: 15,
         File: 16,
+        Reference: 17,
         Folder: 18,
+        EnumMember: 19,
+        Constant: 20,
+        Struct: 21,
+        Event: 22,
+        Operator: 23,
+        TypeParameter: 24,
+      },
+      CompletionList: class CompletionList {
+        constructor(public items: any[] = [], public isIncomplete: boolean = false) {}
+      },
+      DocumentLink: class DocumentLink {
+        constructor(public range: any, public target?: any) {}
+      },
+      InlayHint: class InlayHint {
+        constructor(public position: any, public label: string | any[], public kind?: any) {}
+      },
+      InlayHintKind: { Type: 1, Parameter: 2 },
+      CallHierarchyItem: class CallHierarchyItem {
+        constructor(
+          public kind: any,
+          public name: string,
+          public detail: string,
+          public uri: any,
+          public range: any,
+          public selectionRange: any
+        ) {}
+      },
+      TypeHierarchyItem: class TypeHierarchyItem {
+        constructor(
+          public kind: any,
+          public name: string,
+          public detail: string,
+          public uri: any,
+          public range: any,
+          public selectionRange: any
+        ) {}
+      },
+      SymbolKind: {
+        File: 0,
+        Module: 1,
+        Namespace: 2,
+        Package: 3,
+        Class: 4,
+        Method: 5,
+        Property: 6,
+        Field: 7,
+        Constructor: 8,
+        Enum: 9,
+        Interface: 10,
+        Function: 11,
+        Variable: 12,
+        Constant: 13,
+        String: 14,
+        Number: 15,
+        Boolean: 16,
+        Array: 17,
+        Object: 18,
+        Key: 19,
+        Null: 20,
+        EnumMember: 21,
+        Struct: 22,
+        Event: 23,
+        Operator: 24,
+        TypeParameter: 25,
+      },
+      SymbolInformation: class SymbolInformation {
+        constructor(
+          public name: string,
+          public kind: number,
+          public containerName: string | undefined,
+          public location: any
+        ) {}
+      },
+      DocumentSymbol: class DocumentSymbol {
+        children: DocumentSymbol[] = [];
+        constructor(
+          public name: string,
+          public detail: string,
+          public kind: number,
+          public range: any,
+          public selectionRange: any
+        ) {}
+      },
+      CancellationError: class CancellationError extends Error {
+        constructor() {
+          super("Canceled");
+          this.name = "CancellationError";
+        }
+      },
+      CancellationTokenSource,
+      DocumentHighlight: class DocumentHighlight {
+        constructor(public range: any, public kind?: number) {}
+      },
+      DocumentHighlightKind: { Text: 0, Read: 1, Write: 2 },
+      FoldingRange: class FoldingRange {
+        constructor(public start: number, public end: number, public kind?: number) {}
+      },
+      FoldingRangeKind: { Comment: 1, Imports: 2, Region: 3 },
+      SnippetString: class SnippetString {
+        constructor(public value: string = "") {}
+        appendText(v: string) {
+          this.value += v;
+          return this;
+        }
+        appendTabstop(_num?: number) {
+          return this;
+        }
+        appendPlaceholder(_value: string | ((snippet: SnippetString) => any), _num?: number) {
+          return this;
+        }
+        appendChoice(_values: readonly string[], _num?: number) {
+          return this;
+        }
+        appendVariable(_name: string, _defaultValue?: string | ((snippet: SnippetString) => any)) {
+          return this;
+        }
+      },
+      SignatureHelp: class SignatureHelp {
+        signatures: any[] = [];
+        activeSignature = 0;
+        activeParameter = 0;
+      },
+      SignatureInformation: class SignatureInformation {
+        parameters: any[] = [];
+        constructor(public label: string, public documentation?: any) {}
+      },
+      ParameterInformation: class ParameterInformation {
+        constructor(public label: string | [number, number], public documentation?: any) {}
       },
       DiagnosticSeverity: { Error: 0, Warning: 1, Information: 2, Hint: 3 },
+      DiagnosticTag: { Unnecessary: 1, Deprecated: 2 },
       Diagnostic: class Diagnostic {
         constructor(public range: any, public message: string, public severity?: number) {}
       },
@@ -958,7 +1351,22 @@ export class ExtensionHost {
         constructor(public line: number, public character: number) {}
       },
       Range: class Range {
-        constructor(public start: any, public end: any) {}
+        readonly start: any;
+        readonly end: any;
+        constructor(a: any, b: any, c?: number, d?: number) {
+          if (
+            typeof a === "number" &&
+            typeof b === "number" &&
+            typeof c === "number" &&
+            typeof d === "number"
+          ) {
+            this.start = { line: a, character: b };
+            this.end = { line: c, character: d };
+          } else {
+            this.start = a;
+            this.end = b;
+          }
+        }
       },
       Selection: class Selection {
         constructor(
@@ -972,7 +1380,10 @@ export class ExtensionHost {
           return comparePositions(this.anchor, this.active) <= 0 ? this.active : this.anchor;
         }
         get isEmpty() {
-          return this.anchor.line === this.active.line && this.anchor.character === this.active.character;
+          return (
+            this.anchor.line === this.active.line &&
+            this.anchor.character === this.active.character
+          );
         }
       },
       Location: class Location {
@@ -997,19 +1408,7 @@ export class ExtensionHost {
           return this;
         }
       },
-      EventEmitter: class EventEmitter {
-        private listeners = new Set<(e: any) => void>();
-        event = (listener: (e: any) => void) => {
-          this.listeners.add(listener);
-          return { dispose: () => this.listeners.delete(listener) };
-        };
-        fire(value?: any) {
-          for (const listener of this.listeners) listener(value);
-        }
-        dispose() {
-          this.listeners.clear();
-        }
-      },
+      EventEmitter,
       Disposable: class Disposable {
         constructor(private callOnDispose: () => void) {}
         dispose() {
@@ -1041,6 +1440,9 @@ function uriFromPath(filePath: string) {
     scheme: "file",
     fsPath: filePath,
     path: filePath,
+    authority: "",
+    query: "",
+    fragment: "",
     toString: () => pathToUri(filePath),
   };
 }
@@ -1098,14 +1500,26 @@ function cancellationToken() {
 
 /** VS Code completion kinds are LSP kinds minus one. */
 function normalizeCompletionItem(item: any): any {
+  const label = typeof item.label === "string" ? item.label : item.label?.label ?? "";
+  let insertText = item.insertText;
+  if (insertText && typeof insertText === "object" && "value" in insertText) {
+    insertText = insertText.value;
+  }
+  if (!insertText && item.textEdit?.newText) {
+    insertText = item.textEdit.newText;
+  }
+  const range = item.textEdit?.range || item.range;
   return {
-    label: typeof item.label === "string" ? item.label : item.label?.label ?? "",
-    kind: (item.kind ?? 0) + 1,
-    detail: item.detail,
+    label,
+    kind: typeof item.kind === "number" ? item.kind + 1 : undefined,
+    detail: item.detail || item.label?.detail,
     documentation:
       typeof item.documentation === "string" ? item.documentation : item.documentation?.value,
-    insertText: item.insertText,
-    range: item.range ? toRange(item.range) : undefined,
+    insertText: insertText || label,
+    insertTextFormat: item.insertTextFormat,
+    range: range ? toRange(range) : undefined,
+    sortText: item.sortText,
+    filterText: item.filterText,
   };
 }
 
@@ -1132,18 +1546,35 @@ function languageForPath(filePath: string): string {
     ".ts": "typescript",
     ".tsx": "typescriptreact",
     ".json": "json",
+    ".jsonc": "jsonc",
     ".html": "html",
     ".htm": "html",
     ".css": "css",
     ".scss": "scss",
+    ".sass": "sass",
+    ".less": "less",
     ".md": "markdown",
+    ".markdown": "markdown",
     ".py": "python",
     ".rs": "rust",
     ".go": "go",
     ".java": "java",
+    ".c": "c",
+    ".h": "c",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".hpp": "cpp",
+    ".cs": "csharp",
+    ".php": "php",
+    ".rb": "ruby",
     ".sh": "shellscript",
+    ".bash": "shellscript",
+    ".zsh": "shellscript",
     ".yml": "yaml",
     ".yaml": "yaml",
+    ".sql": "sql",
+    ".xml": "xml",
   };
   return map[ext] || "plaintext";
 }
+

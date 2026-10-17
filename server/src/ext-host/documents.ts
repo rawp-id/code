@@ -59,8 +59,18 @@ export class TextDocumentImpl {
     private readonly saveHandler: (uri: string) => Promise<boolean>
   ) {}
 
-  get uri(): string {
-    return this.entry.uri;
+  get uri(): any {
+    const u = this.entry.uri;
+    const fsPath = uriToPath(u);
+    return {
+      scheme: u.startsWith("file:") ? "file" : "untitled",
+      fsPath,
+      path: fsPath,
+      authority: "",
+      query: "",
+      fragment: "",
+      toString: () => u,
+    };
   }
   get fileName(): string {
     return uriToPath(this.entry.uri);
@@ -216,13 +226,15 @@ export class TextEditorImpl {
   }
 }
 
-export function toPosition(value: Position): Position {
-  return { line: value.line, character: value.character };
+export function toPosition(value: any): Position {
+  return { line: Number(value?.line ?? 0), character: Number(value?.character ?? 0) };
 }
 
-export function toRange(location: Range | Position): Range {
-  if (isRange(location)) return { start: toPosition(location.start), end: toPosition(location.end) };
-  const position = toPosition(location);
+export function toRange(location: any): Range {
+  if (!location) return { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } };
+  const target = location.inserting || location.replacing || location;
+  if (isRange(target)) return { start: toPosition(target.start), end: toPosition(target.end) };
+  const position = toPosition(target);
   return { start: position, end: { ...position } };
 }
 
@@ -231,6 +243,7 @@ export function isRange(value: unknown): value is Range {
     value &&
       typeof value === "object" &&
       "start" in (value as any) &&
-      "end" in (value as any)
+      "end" in (value as any) &&
+      typeof (value as any).start === "object"
   );
 }

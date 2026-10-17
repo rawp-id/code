@@ -5,6 +5,13 @@ import { WebSocketServer } from "ws";
 import { handleConnection } from "./rpc.js";
 import { serveExtensionAsset } from "./ext-assets.js";
 
+process.on("uncaughtException", (err) => {
+  console.error("[kode] uncaughtException:", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[kode] unhandledRejection:", reason);
+});
+
 const PORT = Number(process.env.PORT || 3177);
 const HOST = process.env.HOST || "0.0.0.0";
 
