@@ -1,5 +1,4 @@
 {
-  "*": { "command": "demo" },
   "json": { "command": "vscode-json-language-server", "args": ["--stdio"] },
   "jsonc": { "command": "vscode-json-language-server", "args": ["--stdio"] },
   "html": { "command": "vscode-html-language-server", "args": ["--stdio"] },

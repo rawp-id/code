@@ -4,6 +4,15 @@ import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
 import { markdown } from "@codemirror/lang-markdown";
 import { python } from "@codemirror/lang-python";
+import { rust } from "@codemirror/lang-rust";
+import { go } from "@codemirror/lang-go";
+import { cpp } from "@codemirror/lang-cpp";
+import { java } from "@codemirror/lang-java";
+import { php } from "@codemirror/lang-php";
+import { xml } from "@codemirror/lang-xml";
+import { sql } from "@codemirror/lang-sql";
+import { less } from "@codemirror/lang-less";
+import { sass } from "@codemirror/lang-sass";
 import type { Extension } from "@codemirror/state";
 
 export interface LanguageSpec {
@@ -43,22 +52,23 @@ const EXTENSIONS: Record<string, Entry> = {
   ".vue": { languageId: "vue", shiki: "vue" },
   ".svelte": { languageId: "svelte", shiki: "svelte" },
   ".css": { languageId: "css", shiki: "css", cm: () => css() },
-  ".scss": { languageId: "scss", shiki: "scss" },
-  ".less": { languageId: "less", shiki: "less" },
+  ".scss": { languageId: "scss", shiki: "scss", cm: () => sass() },
+  ".sass": { languageId: "sass", shiki: "sass", cm: () => sass() },
+  ".less": { languageId: "less", shiki: "less", cm: () => less() },
   ".md": { languageId: "markdown", shiki: "markdown", cm: () => markdown() },
   ".markdown": { languageId: "markdown", shiki: "markdown", cm: () => markdown() },
   ".py": { languageId: "python", shiki: "python", cm: () => python() },
-  ".rs": { languageId: "rust", shiki: "rust" },
-  ".go": { languageId: "go", shiki: "go" },
-  ".java": { languageId: "java", shiki: "java" },
+  ".rs": { languageId: "rust", shiki: "rust", cm: () => rust() },
+  ".go": { languageId: "go", shiki: "go", cm: () => go() },
+  ".java": { languageId: "java", shiki: "java", cm: () => java() },
   ".kt": { languageId: "kotlin", shiki: "kotlin" },
-  ".c": { languageId: "c", shiki: "c" },
-  ".h": { languageId: "c", shiki: "cpp" },
-  ".cpp": { languageId: "cpp", shiki: "cpp" },
-  ".cc": { languageId: "cpp", shiki: "cpp" },
-  ".hpp": { languageId: "cpp", shiki: "cpp" },
+  ".c": { languageId: "c", shiki: "c", cm: () => cpp() },
+  ".h": { languageId: "c", shiki: "cpp", cm: () => cpp() },
+  ".cpp": { languageId: "cpp", shiki: "cpp", cm: () => cpp() },
+  ".cc": { languageId: "cpp", shiki: "cpp", cm: () => cpp() },
+  ".hpp": { languageId: "cpp", shiki: "cpp", cm: () => cpp() },
   ".cs": { languageId: "csharp", shiki: "csharp" },
-  ".php": { languageId: "php", shiki: "php" },
+  ".php": { languageId: "php", shiki: "php", cm: () => php() },
   ".rb": { languageId: "ruby", shiki: "ruby" },
   ".sh": { languageId: "shellscript", shiki: "shellscript" },
   ".bash": { languageId: "shellscript", shiki: "shellscript" },
@@ -66,9 +76,9 @@ const EXTENSIONS: Record<string, Entry> = {
   ".yml": { languageId: "yaml", shiki: "yaml" },
   ".yaml": { languageId: "yaml", shiki: "yaml" },
   ".toml": { languageId: "toml", shiki: "toml" },
-  ".sql": { languageId: "sql", shiki: "sql" },
-  ".xml": { languageId: "xml", shiki: "xml" },
-  ".svg": { languageId: "xml", shiki: "xml" },
+  ".sql": { languageId: "sql", shiki: "sql", cm: () => sql() },
+  ".xml": { languageId: "xml", shiki: "xml", cm: () => xml() },
+  ".svg": { languageId: "xml", shiki: "xml", cm: () => xml() },
   ".ini": { languageId: "ini", shiki: "ini" },
   ".conf": { languageId: "ini", shiki: "ini" },
   ".env": { languageId: "ini", shiki: "ini" },

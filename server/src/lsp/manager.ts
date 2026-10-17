@@ -241,17 +241,17 @@ export class LspManager {
     return merged;
   }
 
-  private serverFor(languageId: string): { command: string; args: string[] } {
+  private serverFor(languageId: string): { command: string; args: string[] } | null {
     const config = this.loadConfig();
     const spec = config[languageId] || config["*"];
-    if (!spec || spec.command === "demo") {
-      return { command: process.execPath, args: [DEMO_SERVER] };
-    }
+    if (!spec) return null;
+    if (spec.command === "demo") return { command: process.execPath, args: [DEMO_SERVER] };
     return { command: resolveCommand(spec.command), args: spec.args ?? [] };
   }
 
-  private async connectionFor(languageId: string): Promise<LspConnection> {
+  private async connectionFor(languageId: string): Promise<LspConnection | null> {
     const spec = this.serverFor(languageId);
+    if (!spec) return null;
     const key = `${spec.command} ${spec.args.join(" ")}`;
     this.connectionKeys.set(languageId, key);
 
@@ -331,6 +331,7 @@ export class LspManager {
     this.versions.set(documentUri, 1);
     this.lastText.set(documentUri, text);
     const connection = await this.connectionFor(languageId);
+    if (!connection) return;
     connection.notify("textDocument/didOpen", {
       textDocument: { uri: documentUri, languageId, version: 1, text },
     });
@@ -340,6 +341,7 @@ export class LspManager {
     const languageId = this.docLanguage.get(documentUri);
     if (!languageId) return;
     const connection = await this.connectionFor(languageId);
+    if (!connection) return;
     const key = this.connectionKeys.get(languageId)!;
     const previous = this.lastText.get(documentUri) ?? "";
     const version = (this.versions.get(documentUri) || 0) + 1;
@@ -375,6 +377,7 @@ export class LspManager {
     const languageId = this.docLanguage.get(documentUri);
     if (!languageId) return null;
     const connection = await this.connectionFor(languageId);
+    if (!connection) return [];
     const result = await connection.request("textDocument/completion", {
       textDocument: { uri: documentUri },
       position,
@@ -387,6 +390,7 @@ export class LspManager {
     const languageId = this.docLanguage.get(documentUri);
     if (!languageId) throw new Error(`No language registered for ${documentUri}`);
     const connection = await this.connectionFor(languageId);
+    if (!connection) throw new Error(`No language server configured for ${languageId}`);
     return connection.request(method, params);
   }
 

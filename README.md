@@ -19,8 +19,11 @@ server/   Node process: workspace FS, terminal (pty), extension host, LSP
 - Tabs, save (`Ctrl+S`), dirty indicators.
 - **TextMate syntax highlighting** via **Shiki** (the same engine VS Code uses)
   with ~30 languages loaded on demand: JS/TS/JSX/TSX, JSON, HTML, Vue, Svelte,
-  CSS/SCSS/Less, Markdown, Python, Rust, Go, Java, Kotlin, C/C++, C#, PHP, Ruby,
-  Shell, YAML, TOML, SQL, XML, INI, Diff, Dockerfile, Makefile.
+  CSS/SCSS/Sass/Less, Markdown, Python, Rust, Go, Java, Kotlin, C/C++, C#, PHP,
+  Ruby, Shell, YAML, TOML, SQL, XML, INI, Diff, Dockerfile, Makefile.
+- **CodeMirror language support** (bracket matching, indentation, folding) for
+  JS/TS, JSON, HTML, CSS/SCSS/Sass/Less, Markdown, Python, Rust, Go, C/C++, Java,
+  PHP, XML and SQL — on top of the Shiki colours.
 - Command palette (`Ctrl+Shift+P`) with built-in and extension commands.
 - **Search in files** — sidebar search view (`Ctrl+Shift+F`) with case, regex and
   whole-word options; results are grouped per file and clicking one opens the
@@ -154,7 +157,9 @@ The server ships real language servers and resolves their binaries from
 
 `lsp.config.json` maps a language id to a server command. It is merged from the
 workspace root and the server package root, so a workspace can override the
-defaults. `"*"` is the fallback and `"demo"` selects the bundled demo server.
+defaults. A language with **no configured server gets no completion and no
+diagnostics** — suggestions are never faked. `"demo"` (the bundled demo server)
+is opt-in, and `"*"` can be used as a catch-all fallback if you really want one.
 
 ```json
 {
