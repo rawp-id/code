@@ -101,8 +101,6 @@ function setSidebarView(view: "files" | "search" | "extensions" | "settings"): v
   extensionsEl.style.display = view === "extensions" ? "" : "none";
   settingsEl.style.display = view === "settings" ? "" : "none";
   renderSidebarActions(view);
-  if (view === "search") search.focus();
-  if (view === "settings") settingsView.focus();
   updateActivityBar();
   schedulePersist();
 }
