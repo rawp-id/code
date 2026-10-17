@@ -157,23 +157,28 @@ export class EditorManager {
     }
   }
 
-  async open(path: string): Promise<void> {
+  async open(path: string, draft?: string): Promise<void> {
     if (this.docs.has(path)) {
       this.activate(path);
       return;
     }
-    const content = await bridge.request<string>("fs.readFile", { path });
+    const savedContent = await bridge.request<string>("fs.readFile", { path });
     const spec = languageFor(path);
+    const hasDraft = typeof draft === "string" && draft !== savedContent;
     const doc: OpenDoc = {
       path,
       languageId: spec.languageId,
-      dirty: false,
-      savedContent: content,
-      state: this.createState(path, content),
+      dirty: hasDraft,
+      savedContent,
+      state: this.createState(path, hasDraft ? draft! : savedContent),
     };
     this.docs.set(path, doc);
     this.activate(path);
-    bus.emit("editor.open", { path, languageId: spec.languageId, text: content });
+    bus.emit("editor.open", {
+      path,
+      languageId: spec.languageId,
+      text: doc.state.doc.toString(),
+    });
   }
 
   activate(path: string): void {
@@ -200,6 +205,10 @@ export class EditorManager {
       }
     }
     this.fire();
+  }
+
+  closeAll(): void {
+    for (const path of [...this.docs.keys()]) this.close(path);
   }
 
   async save(path?: string): Promise<void> {

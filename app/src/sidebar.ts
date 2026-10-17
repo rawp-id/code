@@ -28,6 +28,15 @@ export class FileTree {
     if (this.activePath) this.setActive(this.activePath);
   }
 
+  expandedPaths(): string[] {
+    return [...this.expanded];
+  }
+
+  async setExpanded(paths: string[]): Promise<void> {
+    this.expanded = new Set(paths);
+    await this.refresh();
+  }
+
   createFile(base?: string): Promise<void> {
     return this.create("file", base);
   }
@@ -58,17 +67,20 @@ export class FileTree {
     } catch (error: any) {
       toast("error", `Could not create ${name}: ${error?.message}`);
     }
+    bus.emit("tree.changed");
   }
 
   async openFolder(): Promise<void> {
     const root = await pickFolder();
     if (!root) return;
     try {
-      await bridge.request("ws.setRoot", { root });
+      const info = await bridge.request<{ root: string; name: string }>("ws.setRoot", { root });
       this.expanded.clear();
       this.selected = null;
       await this.refresh();
-      toast("info", `Opened ${root}`);
+      bus.emit("workspace.changed", { root: info.root });
+      bus.emit("tree.changed");
+      toast("info", `Opened ${info.root}`);
     } catch (error: any) {
       toast("error", `Could not open folder: ${error?.message}`);
     }
@@ -84,6 +96,7 @@ export class FileTree {
       await bridge.request("fs.rename", { from: entry.path, to });
       bus.emit("file.renamed", { from: entry.path, to });
       await this.refresh();
+      bus.emit("tree.changed");
     } catch (error: any) {
       toast("error", `Rename failed: ${error?.message}`);
     }
@@ -95,6 +108,7 @@ export class FileTree {
       await bridge.request("fs.delete", { path: entry.path });
       bus.emit("file.deleted", { path: entry.path });
       await this.refresh();
+      bus.emit("tree.changed");
     } catch (error: any) {
       toast("error", `Delete failed: ${error?.message}`);
     }
@@ -264,6 +278,7 @@ export class FileTree {
       }
     }
     this.updateIcon(entry, row);
+    bus.emit("tree.changed");
   }
 
   setActive(path: string): void {

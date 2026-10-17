@@ -1,5 +1,5 @@
 import "./style.css";
-import { bridge, type ExtensionInfo } from "./bridge";
+import { bridge, type ExtensionInfo, type ServerInfo } from "./bridge";
 import { bus } from "./bus";
 import { createLayout } from "./layout";
 import { EditorManager } from "./editor";
@@ -13,6 +13,7 @@ import { initConnectionUi, openConnectionDialog } from "./connect";
 import { isNativePlatform, KodeServer } from "./native";
 import { TerminalPanel } from "./terminal";
 import { toast } from "./toast";
+import { loadSession, saveSession } from "./session";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root");
@@ -46,6 +47,8 @@ const search = new SearchView(searchEl, (path, line, column) =>
 
 let activeView: "files" | "search" | "extensions" = "files";
 let panelView: "terminal" | "output" = "terminal";
+let workspaceRoot: string | null = null;
+let persistTimer: number | undefined;
 
 function updateActivityBar(): void {
   const hidden = layout.sidebar.classList.contains("hidden");
@@ -66,6 +69,7 @@ function setSidebarView(view: "files" | "search" | "extensions"): void {
   renderSidebarActions(view);
   if (view === "search") search.focus();
   updateActivityBar();
+  schedulePersist();
 }
 
 function renderSidebarActions(view: "files" | "search" | "extensions"): void {
@@ -91,6 +95,7 @@ function toggleSidebar(force?: boolean): void {
   const hidden = layout.sidebar.classList.contains("hidden");
   layout.sidebar.classList.toggle("hidden", force ?? !hidden);
   updateActivityBar();
+  schedulePersist();
 }
 
 function setPanelView(view: "terminal" | "output"): void {
@@ -101,18 +106,46 @@ function setPanelView(view: "terminal" | "output"): void {
   layout.panel
     .querySelectorAll<HTMLElement>("[data-panel-body]")
     .forEach((body) => body.classList.toggle("hidden", body.dataset.panelBody !== view));
+  schedulePersist();
 }
 
 function togglePanel(show?: boolean): void {
   const hidden = layout.panel.classList.contains("hidden");
   const shouldShow = show ?? hidden;
   layout.panel.classList.toggle("hidden", !shouldShow);
+  schedulePersist();
   if (!shouldShow) return;
   setPanelView(panelView);
   if (panelView === "terminal") {
     terminal.ensureStarted();
     setTimeout(() => terminal.fitNow(), 0);
   }
+}
+
+function buildSession() {
+  const drafts: Record<string, string> = {};
+  for (const doc of editor.openDocs) {
+    if (doc.dirty) drafts[doc.path] = doc.state.doc.toString();
+  }
+  return {
+    workspaceRoot: workspaceRoot || undefined,
+    openDocs: editor.openDocs.map((doc) => doc.path),
+    active: editor.active || undefined,
+    expanded: filetree.expandedPaths(),
+    sidebarView: activeView,
+    panelVisible: !layout.panel.classList.contains("hidden"),
+    panelView,
+    drafts,
+  };
+}
+
+function persistNow(): void {
+  saveSession(buildSession());
+}
+
+function schedulePersist(): void {
+  window.clearTimeout(persistTimer);
+  persistTimer = window.setTimeout(persistNow, 500);
 }
 
 async function updateExtensionCommands(): Promise<void> {
@@ -314,6 +347,17 @@ bus.on("editor.close", ({ path }) => {
 bus.on("editor.selection", ({ path, selection }) =>
   bridge.request("doc.selection", { uri: toUri(path), selection })
 );
+bus.on("editor.change", schedulePersist);
+bus.on("editor.open", schedulePersist);
+bus.on("editor.close", schedulePersist);
+bus.on("editor.active", schedulePersist);
+bus.on("tree.changed", schedulePersist);
+editor.onDidChange(schedulePersist);
+bus.on("workspace.changed", ({ root }: { root: string }) => {
+  workspaceRoot = root;
+  editor.closeAll();
+  schedulePersist();
+});
 
 bridge.handleRequest("editor.applyEdits", (params) => editor.applyEdits(params.uri, params.edits));
 bridge.handleRequest("editor.saveDocument", (params) =>
@@ -398,18 +442,41 @@ bridge.handleRequest("ui.showQuickPick", (params) => showQuickPick(params.items,
 bridge.handleRequest("ui.showInputBox", (params) => showInputBox(params.options));
 
 async function init(): Promise<void> {
+  let info: ServerInfo | null = null;
   try {
-    await bridge.request("server.info");
+    info = await bridge.request<ServerInfo>("server.info");
+    workspaceRoot = info.workspace.root;
   } catch (error: any) {
     toast("error", `Server unavailable: ${error?.message}`);
   }
-  await filetree.refresh();
-  await refreshExtensions();
-  try {
-    await editor.open("README.md");
-  } catch {
-    /* no default file */
+
+  const session = loadSession();
+  const sameWorkspace = Boolean(session && info && session.workspaceRoot === info.workspace.root);
+
+  if (session && sameWorkspace) {
+    await filetree.setExpanded(session.expanded || []);
+    setSidebarView(session.sidebarView || "files");
+    setPanelView(session.panelView || "terminal");
+    togglePanel(Boolean(session.panelVisible));
+    for (const path of session.openDocs) {
+      try {
+        await editor.open(path, session.drafts?.[path]);
+      } catch {
+        /* the file may have been renamed or deleted */
+      }
+    }
+    if (session.active && editor.get(session.active)) editor.activate(session.active);
+  } else {
+    await filetree.refresh();
+    try {
+      await editor.open("README.md");
+    } catch {
+      /* no default file */
+    }
   }
+
+  await refreshExtensions();
+  schedulePersist();
 }
 
 bridge.connect();

@@ -17,6 +17,8 @@ server/   Node process: workspace FS, terminal (pty), extension host, LSP
   that lists the server's directories (with `~` / parent navigation) and also
   accepts a typed path.
 - Tabs, save (`Ctrl+S`), dirty indicators.
+- **Session persistence** per workspace: open tabs, active file, expanded
+  folders, sidebar/panel view and unsaved drafts are restored after a reload.
 - **TextMate syntax highlighting** via **Shiki** (the same engine VS Code uses),
   using VS Code's default **Dark+** theme, with ~30 languages loaded on demand:
   JS/TS/JSX/TSX, JSON, HTML, Vue, Svelte, CSS/SCSS/Sass/Less, Markdown, Python,
