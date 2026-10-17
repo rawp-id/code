@@ -175,10 +175,21 @@ class ClientExtensionService {
       const params = new URLSearchParams({
         query: query.trim(),
         size: String(size),
-        offset: String(offset),
+        offset: String(offset || 0),
       });
-      if (sortBy) params.set("sortBy", sortBy);
-      if (sortOrder) params.set("sortOrder", sortOrder);
+      // Open VSX uses `downloadCount`; accept the UI's friendlier `installs`.
+      if (sortBy) {
+        const sortMap: Record<string, string> = {
+          installs: "downloadCount",
+          rating: "relevance",
+          updated: "timestamp",
+        };
+        const value = sortMap[sortBy] ?? sortBy;
+        if (value) {
+          params.set("sortBy", value);
+          params.set("sortOrder", sortOrder || "desc");
+        }
+      }
 
       const res = await fetch(`https://open-vsx.org/api/-/search?${params}`);
       if (!res.ok) throw new Error(`Marketplace returned HTTP ${res.status}`);

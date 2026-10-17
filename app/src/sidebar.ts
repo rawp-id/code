@@ -1,9 +1,10 @@
-import { bridge, type DirEntry, httpBase } from "./bridge";
+import { bridge, resolveAssetUrl, type DirEntry } from "./bridge";
 import { bus } from "./bus";
 import { icons, fileColor, iconFor } from "./icons";
 import { languageIdFor } from "./lang";
 import { showInputBox } from "./palette";
 import { pickFolder } from "./folderpicker";
+import { localFolder } from "./localfs";
 import { toast } from "./toast";
 import { showContextMenu, type MenuItem } from "./contextmenu";
 
@@ -88,6 +89,32 @@ export class FileTree {
   }
 
   async openFolder(): Promise<void> {
+    // Standalone: open a real device folder through the File System Access API.
+    if (!bridge.connected) {
+      if (!localFolder.supported()) {
+        toast(
+          "warning",
+          "This browser cannot open device folders offline. Connect a server or use the built-in workspace."
+        );
+        return;
+      }
+      try {
+        const name = await localFolder.pick();
+        if (!name) return;
+        this.expanded.clear();
+        this.selected = null;
+        await this.refresh();
+        bus.emit("workspace.changed", { root: name });
+        bus.emit("tree.changed");
+        toast("info", `Opened ${name}`);
+      } catch (error: any) {
+        if (error?.name !== "AbortError") {
+          toast("error", `Could not open folder: ${error?.message}`);
+        }
+      }
+      return;
+    }
+
     const root = await pickFolder();
     if (!root) return;
     try {
@@ -223,10 +250,16 @@ export class FileTree {
         ? iconFor(entry.name, "dir", this.expanded.has(entry.path))
         : iconFor(entry.name, "file", false, languageIdFor(entry.path));
     if (themed) {
-      const img = document.createElement("img");
-      img.src = `${httpBase()}${themed}`;
-      img.alt = "";
-      icon.append(img);
+      const src = resolveAssetUrl(themed);
+      if (src) {
+        const img = document.createElement("img");
+        img.src = src;
+        img.alt = "";
+        icon.append(img);
+      } else {
+        icon.innerHTML = entry.type === "dir" ? icons.folder : icons.file;
+        if (entry.type === "file") icon.style.color = fileColor(entry.name);
+      }
     } else if (entry.type === "dir") {
       icon.innerHTML = this.expanded.has(entry.path) ? icons.folderOpen : icons.folder;
     } else {
@@ -274,11 +307,16 @@ export class FileTree {
     if (icon && entry.type === "dir") {
       const themed = iconFor(entry.name, "dir", open);
       if (themed) {
+        const src = resolveAssetUrl(themed);
         icon.innerHTML = "";
-        const img = document.createElement("img");
-        img.src = `${httpBase()}${themed}`;
-        img.alt = "";
-        icon.append(img);
+        if (src) {
+          const img = document.createElement("img");
+          img.src = src;
+          img.alt = "";
+          icon.append(img);
+        } else {
+          icon.innerHTML = open ? icons.folderOpen : icons.folder;
+        }
       } else {
         icon.innerHTML = open ? icons.folderOpen : icons.folder;
       }

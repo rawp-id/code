@@ -273,7 +273,7 @@ export class SettingsView {
   }
 
   private async loadTheme(value: string): Promise<void> {
-    if (!value.startsWith("ext:")) return;
+    if (!value.startsWith("ext:") && !value.startsWith("client:")) return;
     const theme = this.extensionThemes.find((item) => item.id === value);
     if (!theme) return;
     try {
@@ -288,7 +288,7 @@ export class SettingsView {
   }
 
   private async loadIconTheme(value: string): Promise<void> {
-    if (!value.startsWith("ext:")) {
+    if (!value.startsWith("ext:") && !value.startsWith("client:")) {
       setExtensionIconTheme(null);
       bus.emit("icons.changed");
       return;

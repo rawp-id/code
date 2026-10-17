@@ -137,6 +137,35 @@ flowchart TD
 - [`app/src/extensionsview.ts`](file:///public/code-editor/app/src/extensionsview.ts): UI marketplace & installed cards dengan resolusi icon offline.
 - [`app/src/worker/language-worker.ts`](file:///public/code-editor/app/src/worker/language-worker.ts): Service worker client-side untuk analisa kode & linting.
 - [`app/src/worker/client-lsp.ts`](file:///public/code-editor/app/src/worker/client-lsp.ts): Jembatan antara worker bahasa dan CodeMirror.
-- [`app/src/localvfs.ts`](file:///public/code-editor/app/src/localvfs.ts): Virtual file system in-memory/browser saat server tidak terhubung.
+- [`app/src/localvfs.ts`](file:///public/code-editor/app/src/localvfs.ts): Virtual file system in-memory/browser saat server tidak terhubung, sekaligus *shim* RPC `fs.*`/`ws.*`/`settings.*`/`ext.*`/`doc.*`/`pty.*`.
+- [`app/src/localfs.ts`](file:///public/code-editor/app/src/localfs.ts): Akses folder nyata di storage perangkat via **File System Access API** (`showDirectoryPicker`) + persistensi handle di IndexedDB.
 - [`app/src/settingsview.ts`](file:///public/code-editor/app/src/settingsview.ts): Panel pengaturan terpadu termasuk konfigurasi Server Connection.
 - [`app/src/connect.ts`](file:///public/code-editor/app/src/connect.ts): Helper dialog koneksi yang kini beroperasi secara pasif / non-intrusif.
+- [`app/src/terminal.ts`](file:///public/code-editor/app/src/terminal.ts): Terminal xterm.js yang mendeteksi mode offline lebih awal dan memberi petunjuk koneksi, bukan menunggu timeout.
+
+---
+
+## 9. Status Implementasi Mode Tanpa Server (Standalone)
+
+Seluruh jalur kode yang tadinya hanya bergantung pada server Node kini memiliki fallback klien:
+
+1. **RPC offline tanpa delay**
+   - `Bridge.request()` merutekan `fs.*`, `ws.*`, `settings.*`, `ext.*`, `lsp.*`, `doc.*`, `pty.*`, dan `server.info` ke `LocalVfs` saat WebSocket belum tersambung — tidak ada lagi penantian timeout 3 detik.
+   - `doc.*` bersifat no-op (client LSP tetap menerima `didOpen`/`didChange`), `pty.spawn` gagal cepat dengan pesan yang jelas.
+2. **Terminal sadar-offline**
+   - Tidak mengulang percobaan spawn setiap ketikan; menampilkan satu petunjuk dan otomatis siap kembali saat status server berubah menjadi *connected*.
+3. **Open Folder nyata dari perangkat**
+   - Saat offline, tombol **Open Folder** memakai `window.showDirectoryPicker()`; file dibaca/ditulis langsung ke storage HP, handle disimpan di IndexedDB untuk restore.
+   - Fallback ke workspace virtual bila browser tidak mendukung File System Access API.
+4. **Pencarian file**
+   - `ws.search` offline menghormati `caseSensitive`, `regex`, `wholeWord`, dan `maxResults`, serta mengembalikan bentuk `{ files, matchCount, truncated }` yang sama dengan server.
+5. **Ikon ekstensi**
+   - Helper `resolveAssetUrl()` mengembalikan `data:`/`http(s):` apa adanya dan hanya menambahkan origin server bila benar-benar tersambung; ikon tidak lagi pecah saat offline.
+6. **Tema & ikon ekstensi klien**
+   - `SettingsView` mengenali id tema `client:<ext>:<path>` (bukan hanya `ext:`), sehingga tema warna dan icon theme dari IndexedDB benar-benar diterapkan saat standalone.
+7. **Ekstensi declarative vs runtime**
+   - Install langsung dari URL VSIX bekerja di klien (`clientExtensions.installVsix`).
+   - Menjalankan kode ekstensi runtime ditolak dengan pesan yang menjelaskan butuh server; tema/ikon tetap berfungsi tanpa server.
+8. **Koneksi & startup**
+   - `Bridge.waitForConnection()` memberi server yang berjalan kesempatan menjawab sebelum memutuskan mode offline, menghilangkan balapan saat startup.
+   - `setUrl("")` (Disconnect / Work Offline) tidak lagi membuat `WebSocket` tidak valid; tidak ada pop-up koneksi otomatis.

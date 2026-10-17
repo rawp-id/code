@@ -9,6 +9,7 @@ export class TerminalPanel {
   private id: string | null = null;
   private startPromise: Promise<void> | null = null;
   private pending = "";
+  private offline = false;
 
   constructor(private host: HTMLElement) {
     this.term = new Terminal({
@@ -29,6 +30,7 @@ export class TerminalPanel {
         this.write(data);
         return;
       }
+      if (this.offline) return;
       // The shell has not started or has exited: restart lazily and replay input.
       this.pending += data;
       this.ensureStarted().then(() => {
@@ -54,6 +56,15 @@ export class TerminalPanel {
       );
     });
 
+    bridge.on("status", ({ connected }: { connected: boolean }) => {
+      if (connected && this.offline) {
+        this.offline = false;
+        this.term.writeln(
+          "\r\n\x1b[90m[server connected — press a key to start the terminal]\x1b[0m"
+        );
+      }
+    });
+
     window.addEventListener("resize", () => this.fitNow());
   }
 
@@ -63,6 +74,7 @@ export class TerminalPanel {
 
   ensureStarted(): Promise<void> {
     if (this.id) return Promise.resolve();
+    if (this.offline) return Promise.resolve();
     if (this.startPromise) return this.startPromise;
     this.startPromise = this.doStart().finally(() => {
       this.startPromise = null;
@@ -79,7 +91,13 @@ export class TerminalPanel {
       });
       this.id = id;
     } catch (error: any) {
-      this.term.writeln(`\x1b[31mFailed to start terminal: ${error?.message}\x1b[0m`);
+      this.offline = true;
+      this.term.writeln(
+        `\x1b[31mFailed to start terminal: ${error?.message}\x1b[0m`
+      );
+      this.term.writeln(
+        "\x1b[90mConnect to a Kode server from Settings → Connection to use the shell.\x1b[0m"
+      );
     }
   }
 

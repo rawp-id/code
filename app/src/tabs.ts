@@ -1,6 +1,6 @@
 import type { EditorManager } from "./editor";
 import { icons, fileColor, iconFor } from "./icons";
-import { httpBase } from "./bridge";
+import { resolveAssetUrl } from "./bridge";
 import { showContextMenu, type MenuItem } from "./contextmenu";
 
 export class TabsView {
@@ -39,10 +39,16 @@ export class TabsView {
       const fileName = doc.path.split("/").pop() || doc.path;
       const themed = iconFor(fileName, "file", false, doc.languageId);
       if (themed) {
-        const img = document.createElement("img");
-        img.src = `${httpBase()}${themed}`;
-        img.alt = "";
-        icon.append(img);
+        const src = resolveAssetUrl(themed);
+        if (src) {
+          const img = document.createElement("img");
+          img.src = src;
+          img.alt = "";
+          icon.append(img);
+        } else {
+          icon.innerHTML = icons.file;
+          icon.style.color = fileColor(doc.path);
+        }
       } else {
         icon.innerHTML = icons.file;
         icon.style.color = fileColor(doc.path);

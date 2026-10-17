@@ -1,4 +1,4 @@
-import { bridge, httpBase, type ExtensionInfo } from "./bridge";
+import { bridge, resolveAssetUrl, type ExtensionInfo } from "./bridge";
 import { icons } from "./icons";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -51,10 +51,10 @@ function renderMarkdown(text?: string, isHtml?: boolean): string {
 
 function resolveIconUrl(extensionId: string, icon?: string): string | undefined {
   if (!icon) return undefined;
-  if (icon.startsWith("data:") || icon.startsWith("http://") || icon.startsWith("https://")) {
-    return icon;
-  }
-  return `${httpBase()}/ext-asset?ext=${encodeURIComponent(extensionId)}&path=${encodeURIComponent(icon)}`;
+  if (/^(data:|blob:|https?)/i.test(icon)) return icon;
+  return resolveAssetUrl(
+    `/ext-asset?ext=${encodeURIComponent(extensionId)}&path=${encodeURIComponent(icon)}`
+  );
 }
 
 

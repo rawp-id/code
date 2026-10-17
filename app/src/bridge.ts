@@ -79,6 +79,23 @@ export class Bridge {
     this.open();
   }
 
+  /** Resolve true once the socket is connected, or false after `timeoutMs`. */
+  waitForConnection(timeoutMs = 1500): Promise<boolean> {
+    if (this.connected) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const off = this.on("status", ({ connected }: { connected: boolean }) => {
+        if (connected) {
+          off();
+          resolve(true);
+        }
+      });
+      window.setTimeout(() => {
+        off();
+        resolve(this.connected);
+      }, timeoutMs);
+    });
+  }
+
   setUrl(url: string): void {
     this.serverUrl = url;
     try {
@@ -142,7 +159,19 @@ export class Bridge {
     this.connected = false;
     this.emit("status", { connected: false, url: this.serverUrl });
 
-    const ws = new WebSocket(this.serverUrl);
+    // "Disconnect (Work Offline)" sets an empty URL: keep running standalone.
+    if (!this.serverUrl) {
+      this.ws = null;
+      return;
+    }
+
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(this.serverUrl);
+    } catch {
+      this.ws = null;
+      return;
+    }
     this.ws = ws;
 
     ws.onopen = () => {
@@ -156,6 +185,7 @@ export class Bridge {
       if (this.ws !== ws) return;
       this.connected = false;
       this.emit("status", { connected: false, url: this.serverUrl });
+      if (!this.serverUrl) return;
       this.reconnectTimer = window.setTimeout(() => this.open(), this.reconnectDelay);
       this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, 5000);
     };
@@ -228,4 +258,20 @@ export const bridge = new Bridge();
 /** HTTP origin of the server (for extension assets). */
 export function httpBase(): string {
   return bridge.serverUrl.replace(/^ws/, "http").replace(/\/ws$/, "");
+}
+
+/**
+ * Resolve an asset path returned by an extension host.
+ *
+ * Data/blob/http URLs are returned untouched. Server-relative paths only make
+ * sense while connected; in Standalone Mode they resolve to `undefined` so the
+ * UI can fall back to its built-in icon instead of requesting a dead server.
+ */
+export function resolveAssetUrl(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  if (/^(data:|blob:|https?:|file:)/i.test(url)) return url;
+  if (!bridge.connected) return undefined;
+  const base = httpBase();
+  if (!base) return undefined;
+  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
 }

@@ -13,6 +13,7 @@ import { icons, setIconTheme } from "./icons";
 import { CommandPalette, showInputBox, showQuickPick, type Command } from "./palette";
 import { initConnectionUi, openConnectionDialog } from "./connect";
 import { isNativePlatform, KodeServer } from "./native";
+import { localFolder } from "./localfs";
 import { TerminalPanel } from "./terminal";
 import { toast } from "./toast";
 import { disableInputAssistance } from "./inputs";
@@ -433,6 +434,12 @@ bus.on("workspace.changed", ({ root }: { root: string }) => {
   schedulePersist();
 });
 
+// When a server finally connects, refresh the explorer from it; when it goes
+// away we keep working against the local view without any pop-up.
+bridge.on("status", ({ connected }: { connected: boolean }) => {
+  if (connected) void filetree.refresh();
+});
+
 bridge.handleRequest("editor.applyEdits", (params) => editor.applyEdits(params.uri, params.edits));
 bridge.handleRequest("editor.saveDocument", (params) =>
   editor.saveDocument(fromUri(params.uri))
@@ -515,12 +522,18 @@ bridge.handleRequest("ui.showQuickPick", (params) => showQuickPick(params.items,
 bridge.handleRequest("ui.showInputBox", (params) => showInputBox(params.options));
 
 async function init(): Promise<void> {
+  // Give a running server a moment to answer before deciding we are offline.
+  await bridge.waitForConnection(1200);
+  if (!bridge.connected) {
+    await localFolder.restore().catch(() => undefined);
+  }
+
   let info: ServerInfo | null = null;
   try {
     info = await bridge.request<ServerInfo>("server.info", undefined, 1000);
     workspaceRoot = info.workspace.root;
   } catch {
-    workspaceRoot = "Local Workspace";
+    workspaceRoot = localFolder.mounted ? localFolder.name : "Local Workspace";
   }
 
   await settingsView.refresh();

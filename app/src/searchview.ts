@@ -1,4 +1,4 @@
-import { bridge, httpBase } from "./bridge";
+import { bridge, resolveAssetUrl } from "./bridge";
 import { icons, fileColor, iconFor } from "./icons";
 import { languageIdFor } from "./lang";
 
@@ -107,14 +107,17 @@ export class SearchView {
     const name = path.split("/").pop() || path;
     const themed = iconFor(name, "file", false, languageIdFor(path));
     if (themed) {
-      const img = document.createElement("img");
-      img.src = `${httpBase()}${themed}`;
-      img.alt = "";
-      icon.append(img);
-    } else {
-      icon.innerHTML = icons.file;
-      icon.style.color = fileColor(name);
+      const src = resolveAssetUrl(themed);
+      if (src) {
+        const img = document.createElement("img");
+        img.src = src;
+        img.alt = "";
+        icon.append(img);
+        return icon;
+      }
     }
+    icon.innerHTML = icons.file;
+    icon.style.color = fileColor(name);
     return icon;
   }
 

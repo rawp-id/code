@@ -1,5 +1,6 @@
 import type { DirEntry, ServerInfo } from "./bridge";
 import { clientExtensions } from "./client-extensions";
+import { localFolder } from "./localfs";
 
 const STORAGE_KEY = "kode.local_vfs";
 const SETTINGS_KEY = "kode.local_settings";
@@ -106,15 +107,25 @@ export class LocalVfs {
     if (method.startsWith("settings.")) return true;
     if (method.startsWith("ext.")) return true;
     if (method.startsWith("lsp.")) return true;
+    if (method.startsWith("doc.")) return true;
+    if (method.startsWith("pty.")) return true;
     if (method === "server.info") return true;
     return false;
   }
 
   handle(method: string, params: any = {}): any {
+    // A real device folder (File System Access API) takes over all fs access.
+    if (method.startsWith("fs.") && localFolder.mounted) {
+      return this.localFs(method, params);
+    }
+
     switch (method) {
       case "server.info":
         return {
-          workspace: { root: "Local Workspace", name: "standalone" },
+          workspace: {
+            root: localFolder.mounted ? localFolder.name : "Local Workspace",
+            name: localFolder.mounted ? localFolder.name : "standalone",
+          },
           pty: false,
           ptyMode: undefined,
           node: "Client (WASM / Web Worker)",
@@ -122,7 +133,38 @@ export class LocalVfs {
         } satisfies ServerInfo;
 
       case "ws.info":
-        return { root: "Local Workspace", name: "standalone" };
+        return {
+          root: localFolder.mounted ? localFolder.name : "Local Workspace",
+          name: localFolder.mounted ? localFolder.name : "standalone",
+        };
+
+      case "ws.setRoot":
+        return {
+          root: String(params?.root || (localFolder.mounted ? localFolder.name : "Local Workspace")),
+          name: localFolder.mounted ? localFolder.name : "standalone",
+        };
+
+      // Terminal and the extension host need a Node backend; fail fast rather
+      // than waiting for a WebSocket that will never answer.
+      case "pty.spawn":
+        throw new Error(
+          "Terminal needs a connected Kode server (Standalone Mode has no shell)."
+        );
+      case "pty.write":
+      case "pty.resize":
+      case "pty.kill":
+        return null;
+
+      case "doc.open":
+      case "doc.change":
+      case "doc.save":
+      case "doc.active":
+      case "doc.close":
+      case "doc.selection":
+        return null;
+
+      case "ext.activate":
+        return null;
 
       case "fs.readDir": {
         const dir = (params?.path || "").replace(/^\/+|\/+$/g, "");
@@ -227,20 +269,19 @@ export class LocalVfs {
         return true;
       }
 
+      case "fs.listDirs":
+        return this.listDirs(params);
+
       case "ws.search": {
-        const query = String(params?.query || "").toLowerCase();
-        const results: { file: string; line: number; text: string }[] = [];
-        if (!query) return { results };
-        for (const [file, content] of this.files) {
-          const lines = content.split("\n");
-          for (let i = 0; i < lines.length; i++) {
-            if (lines[i].toLowerCase().includes(query)) {
-              results.push({ file, line: i + 1, text: lines[i] });
-              if (results.length > 100) break;
-            }
-          }
+        if (localFolder.mounted) {
+          return localFolder.search(String(params?.query || ""), {
+            caseSensitive: Boolean(params?.caseSensitive),
+            regex: Boolean(params?.regex),
+            wholeWord: Boolean(params?.wholeWord),
+            maxResults: Number(params?.maxResults) || 1000,
+          });
         }
-        return { results };
+        return this.searchFiles(params);
       }
 
       case "settings.get": {
@@ -299,6 +340,31 @@ export class LocalVfs {
       case "ext.marketplace.install":
         return clientExtensions.installVsix(params?.downloadUrl, params?.iconUrl);
 
+      case "ext.installVsix": {
+        const url = params?.url || (typeof params?.path === "string" && /^https?:/i.test(params.path) ? params.path : "");
+        if (!url) {
+          throw new Error(
+            "Installing from a local .vsix path needs a server; paste an https:// VSIX URL instead."
+          );
+        }
+        return clientExtensions.installVsix(url);
+      }
+
+      case "ext.execCommand": {
+        const owner = clientExtensions
+          .list()
+          .find((ext) => ext.commands.some((command) => command.command === params?.command));
+        if (owner?.runtime) {
+          throw new Error(
+            "Running extension code requires the Kode server (Standalone Mode is declarative only)."
+          );
+        }
+        return null;
+      }
+
+      case "ext.restart":
+        return true;
+
       case "ext.enable":
         clientExtensions.enable(params?.id);
         return true;
@@ -325,6 +391,111 @@ export class LocalVfs {
       case "ext.commands":
         return [];
 
+      default:
+        return null;
+    }
+  }
+
+  /** Virtual-FS directory browser used by the folder picker when offline. */
+  private listDirs(params: any): {
+    path: string;
+    parent: string | null;
+    home: string;
+    dirs: { name: string; path: string }[];
+    truncated: boolean;
+  } {
+    const target = String(params?.path || "").replace(/^\/+|\/+$/g, "");
+    const dirs: { name: string; path: string }[] = [];
+    const prefix = target ? `${target}/` : "";
+    const seen = new Set<string>();
+    for (const dir of this.directories) {
+      if (!dir || !dir.startsWith(prefix) || dir === target) continue;
+      const rest = dir.slice(prefix.length);
+      const name = rest.split("/")[0];
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      dirs.push({ name, path: prefix + name });
+    }
+    dirs.sort((a, b) => a.name.localeCompare(b.name));
+    const slash = target.lastIndexOf("/");
+    return {
+      path: target,
+      parent: target ? (slash > 0 ? target.slice(0, slash) : "") : null,
+      home: "",
+      dirs,
+      truncated: false,
+    };
+  }
+
+  /** Regex/case/whole-word search over the in-browser virtual file system. */
+  private searchFiles(params: any): {
+    files: {
+      path: string;
+      matches: { line: number; column: number; endColumn: number; text: string }[];
+    }[];
+    matchCount: number;
+    truncated: boolean;
+  } {
+    const query = String(params?.query || "");
+    const result = { files: [] as any[], matchCount: 0, truncated: false };
+    if (!query) return result;
+    const maxResults = Number(params?.maxResults) || 1000;
+    let pattern: RegExp;
+    try {
+      const escaped = params?.regex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const source = params?.wholeWord ? `\\b${escaped}\\b` : escaped;
+      pattern = new RegExp(source, params?.caseSensitive ? "g" : "gi");
+    } catch {
+      return result;
+    }
+    for (const [file, content] of this.files) {
+      const lines = content.split("\n");
+      const matches: { line: number; column: number; endColumn: number; text: string }[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        pattern.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = pattern.exec(line)) !== null) {
+          matches.push({
+            line: i + 1,
+            column: match.index,
+            endColumn: match.index + match[0].length,
+            text: line,
+          });
+          result.matchCount += 1;
+          if (match[0].length === 0) pattern.lastIndex += 1;
+          if (result.matchCount >= maxResults) {
+            result.truncated = true;
+            break;
+          }
+        }
+        if (result.truncated) break;
+      }
+      if (matches.length > 0) result.files.push({ path: file, matches });
+      if (result.truncated) break;
+    }
+    return result;
+  }
+
+  /** Read/write through the mounted File System Access API directory. */
+  private localFs(method: string, params: any): any {
+    switch (method) {
+      case "fs.readDir":
+        return localFolder.readDir(String(params?.path || ""));
+      case "fs.readFile":
+        return localFolder.readFile(String(params?.path || ""));
+      case "fs.writeFile":
+        return localFolder.writeFile(String(params?.path || ""), String(params?.content ?? ""));
+      case "fs.createFile":
+        return localFolder.createFile(String(params?.path || ""));
+      case "fs.mkdir":
+        return localFolder.makeDirectory(String(params?.path || ""));
+      case "fs.delete":
+        return localFolder.remove(String(params?.path || ""));
+      case "fs.rename":
+        return localFolder.rename(String(params?.from || ""), String(params?.to || ""));
+      case "fs.listDirs":
+        return this.listDirs(params);
       default:
         return null;
     }
