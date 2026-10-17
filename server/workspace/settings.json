@@ -51,7 +51,7 @@
   },
   "workbench": {
     "sidebarWidth": 240,
-    "iconTheme": "ext:vscode-icons-team.vscode-icons:dist/src/vsicons-icon-theme.json"
+    "iconTheme": "ext:PKief.material-icon-theme:./dist/material-icons.json"
   },
   "textTools": {
     "greeting": "Hello from settings.json"

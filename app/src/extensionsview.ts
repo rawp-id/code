@@ -540,11 +540,22 @@ export class ExtensionsView {
         : undefined,
       name: extension.displayName,
       version: extension.version,
-      description: extension.runtime ? "Extension with runtime code" : "Declarative extension",
+      description: extension.runtime
+        ? "Functional extension (executes in Node.js host)"
+        : "Declarative extension (themes, icons, grammars)",
       meta: `${extension.id} · ${extension.runtime ? "runtime" : "declarative"}${
         extension.disabled ? " · disabled" : ""
       }`,
     });
+
+    const titleEl = card.querySelector(".ext-title");
+    if (titleEl) {
+      const badge = document.createElement("span");
+      badge.className = extension.runtime ? "ext-badge-runtime" : "ext-badge-declarative";
+      badge.textContent = extension.runtime ? "runtime" : "declarative";
+      titleEl.append(badge);
+    }
+
     card.onclick = () => this.openDetail(extension.id);
 
     const actions = card.querySelector(".ext-actions")!;

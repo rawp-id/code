@@ -258,6 +258,13 @@ export class ExtensionHost {
     if (!ext || this.disabled.has(id)) return this.list().find((e) => e.id === id) || null;
     if (this.activated.has(id)) return this.list().find((e) => e.id === id) || null;
 
+    // Declarative extensions (themes, icon themes, grammar, snippets) have no JS runtime.
+    // Mark as active immediately without creating a VM context or reading non-existent entry files.
+    if (!ext.runtime || !ext.main) {
+      this.activated.add(id);
+      return this.list().find((e) => e.id === id) || null;
+    }
+
     const mainPath = resolveMain(ext.dir, ext.main);
     const context = this.createContext(ext);
     const vscode = this.createShim(ext, context);
@@ -371,6 +378,11 @@ export class ExtensionHost {
     if (!this.scanned) await this.scan();
     for (const ext of this.extensions.values()) {
       if (this.disabled.has(ext.id)) continue;
+      // Declarative extensions are already passive and require zero runtime startup
+      if (!ext.runtime || !ext.main) {
+        this.activated.add(ext.id);
+        continue;
+      }
       const events: string[] = ext.manifest?.activationEvents || [];
       if (!events.includes("*") && !events.includes("onStartupFinished")) continue;
       try {
@@ -387,6 +399,8 @@ export class ExtensionHost {
     if (!this.scanned) await this.scan();
     for (const ext of this.extensions.values()) {
       if (this.disabled.has(ext.id) || this.activated.has(ext.id)) continue;
+      // Only extensions with executable runtime code need on-demand VM activation
+      if (!ext.runtime || !ext.main) continue;
       const events: string[] = ext.manifest?.activationEvents || [];
       const contributesLangs = (ext.manifest?.contributes?.languages || []).some(
         (l: any) => l.id === languageId

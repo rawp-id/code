@@ -909,6 +909,32 @@ body {
   font-size: 12px;
 }
 
+.ext-badge-declarative {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(63, 185, 80, 0.15);
+  color: #3fb950;
+  border: 1px solid rgba(63, 185, 80, 0.3);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.ext-badge-runtime {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 .ext-empty {
   color: var(--fg-dim);
   font-size: 12px;
