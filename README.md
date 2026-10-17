@@ -11,9 +11,12 @@ server/   Node process: workspace FS, terminal (pty), extension host, LSP
 
 ## What works right now
 
-- File explorer with a toolbar (**New File, New Folder, Refresh, Open Folder**)
-  and a right-click menu (**Rename, Delete**); tabs, save (`Ctrl+S`), dirty
-  indicators.
+- File explorer with header actions (**New File, New Folder, Refresh, Open
+  Folder**) and a right-click menu (**New File/Folder, Rename, Delete**); folder
+  rows show `+file` / `+folder` on hover. **Open Folder** opens a browser dialog
+  that lists the server's directories (with `~` / parent navigation) and also
+  accepts a typed path.
+- Tabs, save (`Ctrl+S`), dirty indicators.
 - Syntax highlighting for JS/TS, JSON, HTML, CSS, Markdown, Python.
 - Command palette (`Ctrl+Shift+P`) with built-in and extension commands.
 - **Search in files** — sidebar search view (`Ctrl+Shift+F`) with case, regex and

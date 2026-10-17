@@ -8,6 +8,7 @@ import { installVsix, uninstallExtension } from "./ext-host/installer.js";
 import { searchMarketplace, getMarketplaceDetail, type Registry } from "./ext-host/marketplace.js";
 import { LspManager } from "./lsp/manager.js";
 import { searchWorkspace } from "./search.js";
+import { listDirectories } from "./browse.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(HERE, "..");
@@ -108,6 +109,7 @@ export function handleConnection(ws: WebSocket): void {
     "fs.delete": ({ path: rel }: { path: string }) => workspace.delete(rel),
 
     "ws.search": (params: any) => searchWorkspace(workspace.root, params),
+    "fs.listDirs": ({ path: dir }: { path?: string }) => listDirectories(dir),
 
     "doc.open": ({ uri, languageId, text }: { uri: string; languageId: string; text: string }) => {
       host.openDocument(uri, languageId, text);

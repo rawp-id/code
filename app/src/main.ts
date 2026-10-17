@@ -151,18 +151,6 @@ async function runExtensionCommand(extensionId: string, command: string): Promis
   }
 }
 
-async function openFolder(): Promise<void> {
-  const target = await showInputBox({ prompt: "Absolute path of the folder to open" });
-  if (!target) return;
-  try {
-    const info = await bridge.request<{ root: string; name: string }>("ws.setRoot", { root: target });
-    await filetree.refresh();
-    toast("info", `Opened ${info.root}`);
-  } catch (error: any) {
-    toast("error", `Could not open folder: ${error?.message}`);
-  }
-}
-
 const builtinCommands: Command[] = [
   { id: "file.save", title: "File: Save", hint: "Ctrl+S", run: () => editor.save().then(() => toast("info", "Saved")) },
   { id: "file.refresh", title: "File: Refresh Explorer", run: () => filetree.refresh() },
@@ -205,7 +193,7 @@ const builtinCommands: Command[] = [
     },
   },
   { id: "ext.all", title: "Extensions: Show All", run: () => { toggleSidebar(false); setSidebarView("extensions"); } },
-  { id: "workspace.open", title: "Workspace: Open Folder…", run: () => openFolder() },
+  { id: "workspace.open", title: "Workspace: Open Folder…", run: () => filetree.openFolder() },
   { id: "connection.url", title: "Connection: Set Server URL…", run: () => openConnectionDialog() },
   {
     id: "server.termux",

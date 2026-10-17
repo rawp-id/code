@@ -2,6 +2,7 @@ import { bridge, type DirEntry } from "./bridge";
 import { bus } from "./bus";
 import { icons, fileColor } from "./icons";
 import { showInputBox } from "./palette";
+import { pickFolder } from "./folderpicker";
 import { toast } from "./toast";
 
 export class FileTree {
@@ -60,7 +61,7 @@ export class FileTree {
   }
 
   async openFolder(): Promise<void> {
-    const root = await showInputBox({ prompt: "Absolute path of the folder to open" });
+    const root = await pickFolder();
     if (!root) return;
     try {
       await bridge.request("ws.setRoot", { root });
