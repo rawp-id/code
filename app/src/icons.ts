@@ -22,3 +22,33 @@ export const icons = {
   file: outline(`<path d="M3.6 2.2h5.1l3.3 3.3v8.3H3.6z"/><path d="M8.7 2.2v3.3h3.3"/>`),
   close: outline(`<path d="M4 4l8 8M12 4l-8 8"/>`, 14),
 };
+
+/** Accent colour for a file icon, by extension. */
+export function fileColor(fileName: string): string {
+  const dot = fileName.lastIndexOf(".");
+  const ext = dot >= 0 ? fileName.slice(dot).toLowerCase() : "";
+  const colors: Record<string, string> = {
+    ".js": "#e5c07b",
+    ".mjs": "#e5c07b",
+    ".cjs": "#e5c07b",
+    ".jsx": "#61dafb",
+    ".ts": "#4d9fec",
+    ".tsx": "#4d9fec",
+    ".json": "#e5c07b",
+    ".html": "#e06c4b",
+    ".htm": "#e06c4b",
+    ".css": "#42a5f5",
+    ".scss": "#cf649a",
+    ".md": "#519aba",
+    ".markdown": "#519aba",
+    ".py": "#4b8bbe",
+    ".rs": "#dea584",
+    ".go": "#00add8",
+    ".java": "#b07219",
+    ".yml": "#cb6d51",
+    ".yaml": "#cb6d51",
+    ".sh": "#89e051",
+    ".toml": "#9c6b4f",
+  };
+  return colors[ext] || "#7f8c98";
+}

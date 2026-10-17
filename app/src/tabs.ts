@@ -1,5 +1,5 @@
 import type { EditorManager } from "./editor";
-import { icons } from "./icons";
+import { icons, fileColor } from "./icons";
 
 export class TabsView {
   constructor(private el: HTMLElement, private editor: EditorManager) {
@@ -14,9 +14,15 @@ export class TabsView {
       tab.className = "tab" + (doc.path === this.editor.active ? " active" : "");
       tab.title = doc.path;
 
+      const icon = document.createElement("span");
+      icon.className = "tab-icon";
+      icon.innerHTML = icons.file;
+      icon.style.color = fileColor(doc.path);
+
       const label = document.createElement("span");
+      label.className = "tab-label";
       label.textContent = doc.path.split("/").pop() || doc.path;
-      tab.append(label);
+      tab.append(icon, label);
 
       if (doc.dirty) {
         const dirty = document.createElement("span");

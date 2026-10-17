@@ -238,6 +238,24 @@ body {
   height: 14px;
 }
 
+.tab-icon {
+  flex: 0 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tab .close:hover {
   background: var(--hover);
 }

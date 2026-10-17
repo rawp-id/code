@@ -37,14 +37,27 @@ const terminal = new TerminalPanel(layout.terminalHost);
 let activeView: "files" | "extensions" = "files";
 let panelView: "terminal" | "output" = "terminal";
 
+function updateActivityBar(): void {
+  const hidden = layout.sidebar.classList.contains("hidden");
+  layout.activityBar
+    .querySelectorAll<HTMLButtonElement>("button[data-view]")
+    .forEach((button) =>
+      button.classList.toggle("active", !hidden && button.dataset.view === activeView)
+    );
+}
+
 function setSidebarView(view: "files" | "extensions"): void {
   activeView = view;
   layout.sideTitle.textContent = view === "files" ? "Explorer" : "Extensions";
   filesEl.style.display = view === "files" ? "" : "none";
   extensionsEl.style.display = view === "extensions" ? "" : "none";
-  layout.activityBar
-    .querySelectorAll<HTMLButtonElement>("button[data-view]")
-    .forEach((button) => button.classList.toggle("active", button.dataset.view === view));
+  updateActivityBar();
+}
+
+function toggleSidebar(force?: boolean): void {
+  const hidden = layout.sidebar.classList.contains("hidden");
+  layout.sidebar.classList.toggle("hidden", force ?? !hidden);
+  updateActivityBar();
 }
 
 function setPanelView(view: "terminal" | "output"): void {
@@ -117,9 +130,9 @@ const builtinCommands: Command[] = [
   { id: "file.save", title: "File: Save", hint: "Ctrl+S", run: () => editor.save().then(() => toast("info", "Saved")) },
   { id: "file.refresh", title: "File: Refresh Explorer", run: () => filetree.refresh() },
   { id: "view.terminal", title: "View: Toggle Terminal", hint: "Ctrl+`", run: () => togglePanel() },
-  { id: "view.sidebar", title: "View: Toggle Sidebar", hint: "Ctrl+B", run: () => layout.sidebar.classList.toggle("hidden") },
-  { id: "view.explorer", title: "View: Show Explorer", run: () => { layout.sidebar.classList.remove("hidden"); setSidebarView("files"); } },
-  { id: "view.extensions", title: "View: Show Extensions", run: () => { layout.sidebar.classList.remove("hidden"); setSidebarView("extensions"); } },
+  { id: "view.sidebar", title: "View: Toggle Sidebar", hint: "Ctrl+B", run: () => toggleSidebar() },
+  { id: "view.explorer", title: "View: Show Explorer", run: () => { toggleSidebar(false); setSidebarView("files"); } },
+  { id: "view.extensions", title: "View: Show Extensions", run: () => { toggleSidebar(false); setSidebarView("extensions"); } },
   { id: "ext.refresh", title: "Extensions: Refresh", run: () => refreshExtensions() },
   {
     id: "ext.install",
@@ -153,7 +166,7 @@ const builtinCommands: Command[] = [
       await refreshExtensions();
     },
   },
-  { id: "ext.all", title: "Extensions: Show All", run: () => { layout.sidebar.classList.remove("hidden"); setSidebarView("extensions"); } },
+  { id: "ext.all", title: "Extensions: Show All", run: () => { toggleSidebar(false); setSidebarView("extensions"); } },
   { id: "workspace.open", title: "Workspace: Open Folder…", run: () => openFolder() },
   { id: "connection.url", title: "Connection: Set Server URL…", run: () => openConnectionDialog() },
   {
@@ -204,7 +217,14 @@ palette.setCommands(builtinCommands);
 layout.activityBar.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-view]");
   if (!button || !button.dataset.view) return;
-  setSidebarView(button.dataset.view as "files" | "extensions");
+  const view = button.dataset.view as "files" | "extensions";
+  const hidden = layout.sidebar.classList.contains("hidden");
+  if (!hidden && activeView === view) {
+    toggleSidebar(true);
+  } else {
+    toggleSidebar(false);
+    setSidebarView(view);
+  }
 });
 
 layout.panelTabs.addEventListener("click", (event) => {
@@ -228,7 +248,7 @@ bus.on("file.save", () =>
 );
 bus.on("palette.open", () => palette.open());
 bus.on("panel.toggle", () => togglePanel());
-bus.on("sidebar.toggle", () => layout.sidebar.classList.toggle("hidden"));
+bus.on("sidebar.toggle", () => toggleSidebar());
 
 const toUri = (filePath: string) =>
   filePath.startsWith("file://") ? filePath : `file://${filePath}`;
@@ -304,7 +324,7 @@ document.addEventListener(
     if (!event.shiftKey && key === "b") {
       event.preventDefault();
       event.stopPropagation();
-      layout.sidebar.classList.toggle("hidden");
+      toggleSidebar();
     }
   },
   true

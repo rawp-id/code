@@ -1,6 +1,6 @@
 import { bridge, type DirEntry, type ExtensionInfo } from "./bridge";
 import { bus } from "./bus";
-import { icons } from "./icons";
+import { icons, fileColor } from "./icons";
 
 export class FileTree {
   private expanded = new Set<string>();
@@ -68,12 +68,12 @@ export class FileTree {
 
     const icon = document.createElement("span");
     icon.className = `tree-icon ${entry.type}`;
-    icon.innerHTML =
-      entry.type === "dir"
-        ? this.expanded.has(entry.path)
-          ? icons.folderOpen
-          : icons.folder
-        : icons.file;
+    if (entry.type === "dir") {
+      icon.innerHTML = this.expanded.has(entry.path) ? icons.folderOpen : icons.folder;
+    } else {
+      icon.innerHTML = icons.file;
+      icon.style.color = fileColor(entry.name);
+    }
 
     const label = document.createElement("span");
     label.className = "tree-label";
