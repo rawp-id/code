@@ -37,7 +37,7 @@ export class TabsView {
       const icon = document.createElement("span");
       icon.className = "tab-icon";
       const fileName = doc.path.split("/").pop() || doc.path;
-      const themed = iconFor(fileName, "file");
+      const themed = iconFor(fileName, "file", false, doc.languageId);
       if (themed) {
         const img = document.createElement("img");
         img.src = `${httpBase()}${themed}`;

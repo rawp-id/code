@@ -538,6 +538,7 @@ export class ExtensionHost {
       fileExtensions: mapDefs(theme.fileExtensions || {}, true),
       folderNames: mapDefs(theme.folderNames || {}),
       folderNamesExpanded: mapDefs(theme.folderNamesExpanded || {}),
+      languageIds: mapDefs(theme.languageIds || {}),
     };
   }
 

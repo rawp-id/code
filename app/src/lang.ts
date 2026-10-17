@@ -91,14 +91,22 @@ const SPECIAL_FILES: Record<string, Entry> = {
   makefile: { languageId: "makefile", shiki: "make" },
 };
 
-export function languageFor(filePath: string): LanguageSpec {
+function entryFor(filePath: string): Entry | undefined {
   const lower = filePath.toLowerCase();
   const base = lower.slice(lower.lastIndexOf("/") + 1);
   const special = SPECIAL_FILES[base] ?? SPECIAL_FILES[base.split(".")[0]];
-  if (special) return toSpec(special);
-
+  if (special) return special;
   const dot = lower.lastIndexOf(".");
-  const entry = dot >= 0 ? EXTENSIONS[lower.slice(dot)] : undefined;
+  return dot >= 0 ? EXTENSIONS[lower.slice(dot)] : undefined;
+}
+
+/** Language id only (cheap; does not build CodeMirror extensions). */
+export function languageIdFor(filePath: string): string {
+  return entryFor(filePath)?.languageId ?? "plaintext";
+}
+
+export function languageFor(filePath: string): LanguageSpec {
+  const entry = entryFor(filePath);
   if (!entry) return { languageId: "plaintext", extensions: [] };
   return toSpec(entry);
 }

@@ -1,6 +1,7 @@
 import { bridge, type DirEntry, httpBase } from "./bridge";
 import { bus } from "./bus";
 import { icons, fileColor, iconFor } from "./icons";
+import { languageIdFor } from "./lang";
 import { showInputBox } from "./palette";
 import { pickFolder } from "./folderpicker";
 import { toast } from "./toast";
@@ -194,7 +195,7 @@ export class FileTree {
     const themed =
       entry.type === "dir"
         ? iconFor(entry.name, "dir", this.expanded.has(entry.path))
-        : iconFor(entry.name, "file");
+        : iconFor(entry.name, "file", false, languageIdFor(entry.path));
     if (themed) {
       const img = document.createElement("img");
       img.src = `${httpBase()}${themed}`;

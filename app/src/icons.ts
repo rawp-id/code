@@ -56,6 +56,7 @@ export interface ExtensionIconTheme {
   fileExtensions: Record<string, string>;
   folderNames?: Record<string, string>;
   folderNamesExpanded?: Record<string, string>;
+  languageIds?: Record<string, string>;
 }
 
 let extensionIconTheme: ExtensionIconTheme | null = null;
@@ -69,7 +70,12 @@ export function setExtensionIconTheme(theme: ExtensionIconTheme | null): void {
 }
 
 /** Icon URL from an installed icon theme, or null to use the built-in icon. */
-export function iconFor(name: string, type: "file" | "dir", expanded = false): string | null {
+export function iconFor(
+  name: string,
+  type: "file" | "dir",
+  expanded = false,
+  languageId?: string
+): string | null {
   if (!extensionIconTheme) return null;
   if (type === "dir") {
     const named = expanded
@@ -87,6 +93,9 @@ export function iconFor(name: string, type: "file" | "dir", expanded = false): s
     const candidate = parts.slice(i).join(".").toLowerCase();
     const url = extensionIconTheme.fileExtensions[candidate];
     if (url) return url;
+  }
+  if (languageId && extensionIconTheme.languageIds?.[languageId]) {
+    return extensionIconTheme.languageIds[languageId];
   }
   return extensionIconTheme.file || null;
 }
