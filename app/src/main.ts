@@ -20,6 +20,12 @@ import { disableInputAssistance } from "./inputs";
 import { showContextMenu } from "./contextmenu";
 import { loadSession, saveSession } from "./session";
 import { clientLsp } from "./worker/client-lsp";
+import {
+  configuredFormatterId,
+  formattersFor,
+  resolveFormatter,
+  type FormatterProvider,
+} from "./formatters";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root");
@@ -69,6 +75,10 @@ layout.editorHost.addEventListener("contextmenu", (event) => {
     { label: "Paste", run: () => editor.paste() },
     { separator: true },
     { label: "Select All", run: () => editor.selectAll() },
+    { separator: true },
+    { label: "Format Document", run: () => void formatDocument() },
+    { label: "Format Document With…", run: () => void formatDocumentWith() },
+    { separator: true },
     { label: "Command Palette", run: () => palette.open() },
   ]);
 });
@@ -244,8 +254,106 @@ async function runExtensionCommand(extensionId: string, command: string): Promis
   }
 }
 
+async function applyFormatter(
+  path: string,
+  provider: FormatterProvider,
+  options: { silent?: boolean } = {}
+): Promise<boolean> {
+  const doc = editor.get(path);
+  if (!doc) return false;
+  const text = doc.state.doc.toString();
+  try {
+    const formatted = await clientLsp.format(provider.id, text, doc.languageId, {
+      tabSize: appSettings?.editor.tabSize ?? 2,
+    });
+    if (typeof formatted !== "string") throw new Error("Formatter returned no result");
+    if (formatted === text) {
+      if (!options.silent) toast("info", `Already formatted (${provider.label})`);
+      return true;
+    }
+    editor.formatText(path, formatted);
+    if (!options.silent) toast("info", `Formatted with ${provider.label}`);
+    return true;
+  } catch (error: any) {
+    if (!options.silent) toast("error", `Format failed: ${error?.message ?? error}`);
+    return false;
+  }
+}
+
+async function formatDocument(path?: string, options: { silent?: boolean } = {}): Promise<boolean> {
+  const target = path ?? editor.active;
+  const doc = target ? editor.get(target) : undefined;
+  if (!doc) return false;
+  const resolved = resolveFormatter(doc.languageId, appSettings);
+  if (!resolved) {
+    if (!options.silent) {
+      toast("warning", `No formatter for '${doc.languageId}'. Try "Format Document With…".`);
+    }
+    return false;
+  }
+  return applyFormatter(doc.path, resolved.provider, options);
+}
+
+async function formatDocumentWith(path?: string): Promise<void> {
+  const target = path ?? editor.active;
+  const doc = target ? editor.get(target) : undefined;
+  if (!doc) return;
+  const providers = formattersFor(doc.languageId);
+  if (providers.length === 0) {
+    toast("warning", `No formatter for '${doc.languageId}'.`);
+    return;
+  }
+  const configured = configuredFormatterId(doc.languageId, appSettings);
+  const choice = await showQuickPick(
+    providers.map((provider) => ({
+      label: provider.label,
+      description: `${provider.id}${provider.id === configured ? " · default" : ""}`,
+      id: provider.id,
+    })),
+    { placeHolder: `Select a formatter for ${doc.languageId}` }
+  );
+  if (!choice) return;
+  const provider = providers.find((item) => item.id === choice.id);
+  if (!provider) return;
+  await applyFormatter(doc.path, provider);
+  if (provider.id !== configured && providers.length > 1) {
+    const remember = await showQuickPick(
+      [
+        { label: `Set ${provider.label} as default`, id: "yes" },
+        { label: "Just this once", id: "no" },
+      ],
+      { placeHolder: `Set default formatter for ${doc.languageId}?` }
+    );
+    if (remember?.id === "yes") {
+      settingsView.setFormatterDefault(doc.languageId, provider.id);
+      toast("info", `${provider.label} is now the default for ${doc.languageId}`);
+    }
+  }
+}
+
+const savingPaths = new Set<string>();
+
+async function saveFile(path?: string): Promise<void> {
+  const target = path ?? editor.active;
+  if (!target || savingPaths.has(target)) return;
+  savingPaths.add(target);
+  try {
+    if (appSettings?.editor.formatOnSave) {
+      await formatDocument(target, { silent: true });
+    }
+    await editor.save(target);
+    toast("info", "Saved");
+  } catch (error: any) {
+    toast("error", error?.message ?? "Save failed");
+  } finally {
+    savingPaths.delete(target);
+  }
+}
+
 const builtinCommands: Command[] = [
-  { id: "file.save", title: "File: Save", hint: "Ctrl+S", run: () => editor.save().then(() => toast("info", "Saved")) },
+  { id: "file.save", title: "File: Save", hint: "Ctrl+S", run: () => saveFile() },
+  { id: "editor.format", title: "Format Document", hint: "Shift+Alt+F", run: () => formatDocument() },
+  { id: "editor.formatWith", title: "Format Document With…", run: () => formatDocumentWith() },
   { id: "editor.suggest", title: "Editor: Trigger Suggest", hint: "Ctrl+Space", run: () => editor.triggerSuggest() },
   { id: "file.refresh", title: "File: Refresh Explorer", run: () => filetree.refresh() },
   { id: "view.terminal", title: "View: Toggle Terminal", hint: "Ctrl+`", run: () => togglePanel() },
@@ -363,9 +471,7 @@ layout.panelTabs.addEventListener("click", (event) => {
   }
 });
 
-bus.on("file.save", () =>
-  editor.save().then(() => toast("info", "Saved")).catch((error: any) => toast("error", error?.message))
-);
+bus.on("file.save", () => void saveFile());
 bus.on("palette.open", () => palette.open());
 bus.on("panel.toggle", () => togglePanel());
 bus.on("sidebar.toggle", () => toggleSidebar());
@@ -390,7 +496,7 @@ bus.on("editor.change", ({ path, text }) => {
   if (appSettings?.editor.autoSave === "afterDelay") {
     window.clearTimeout(autoSaveTimer);
     autoSaveTimer = window.setTimeout(() => {
-      editor.save(path).catch(() => undefined);
+      void saveFile(path);
     }, appSettings.editor.autoSaveDelay || 1000);
   } else {
     window.clearTimeout(autoSaveTimer);
@@ -451,6 +557,12 @@ bridge.handleRequest("editor.showDocument", (params) => editor.showDocument(from
 document.addEventListener(
   "keydown",
   (event) => {
+    if (event.altKey && event.shiftKey && event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      event.stopPropagation();
+      void formatDocument();
+      return;
+    }
     if (event.altKey && event.code === "Backquote") {
       event.preventDefault();
       event.stopPropagation();
@@ -490,10 +602,7 @@ document.addEventListener(
     if (!event.shiftKey && key === "s") {
       event.preventDefault();
       event.stopPropagation();
-      editor
-        .save()
-        .then(() => toast("info", "Saved"))
-        .catch((error: any) => toast("error", error?.message));
+      void saveFile();
       return;
     }
     if (!event.shiftKey && key === "b") {

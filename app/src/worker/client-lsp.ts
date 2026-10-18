@@ -58,15 +58,15 @@ export class ClientLspService {
     return () => this.diagnosticListeners.delete(listener);
   }
 
-  private request<T = any>(method: string, params: any): Promise<T> {
-    if (!this.worker) return Promise.resolve([] as any);
+  private request<T = any>(method: string, params: any, timeoutMs = 5000): Promise<T> {
+    if (!this.worker) return Promise.resolve(null as any);
     const id = this.seq++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       this.worker!.postMessage({ id, method, params });
       setTimeout(() => {
-        if (this.pending.delete(id)) resolve([] as any);
-      }, 5000);
+        if (this.pending.delete(id)) resolve(null as any);
+      }, timeoutMs);
     });
   }
 
@@ -93,6 +93,21 @@ export class ClientLspService {
 
   async hover(uri: string, position: { line: number; character: number }): Promise<any> {
     return this.request<any>("textDocument/hover", { uri, position }).catch(() => null);
+  }
+
+  /** Run a formatter (metadata lives in `formatters.ts`). */
+  async format(
+    providerId: string,
+    text: string,
+    languageId: string,
+    options: any
+  ): Promise<string | null> {
+    const result = await this.request<{ text: string }>(
+      "formatter/format",
+      { providerId, text, languageId, options },
+      30000
+    ).catch(() => null);
+    return result?.text ?? null;
   }
 }
 

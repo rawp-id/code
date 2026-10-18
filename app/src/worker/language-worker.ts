@@ -370,11 +370,94 @@ function getHover(doc: DocumentEntry, line: number, character: number): { conten
   return null;
 }
 
+// ---- Formatting ------------------------------------------------------------
+
+const PRETTIER_PARSERS: Record<string, { parser: string; plugins: string[] }> = {
+  javascript: { parser: "babel", plugins: ["babel", "estree"] },
+  javascriptreact: { parser: "babel", plugins: ["babel", "estree"] },
+  typescript: { parser: "typescript", plugins: ["typescript", "estree"] },
+  typescriptreact: { parser: "typescript", plugins: ["typescript", "estree"] },
+  json: { parser: "json", plugins: ["babel", "estree"] },
+  jsonc: { parser: "json", plugins: ["babel", "estree"] },
+  css: { parser: "css", plugins: ["postcss"] },
+  scss: { parser: "scss", plugins: ["postcss"] },
+  less: { parser: "less", plugins: ["postcss"] },
+  html: { parser: "html", plugins: ["html"] },
+  vue: { parser: "vue", plugins: ["html"] },
+  markdown: { parser: "markdown", plugins: ["markdown"] },
+  yaml: { parser: "yaml", plugins: ["yaml"] },
+};
+
+async function loadPrettierPlugin(name: string): Promise<any> {
+  switch (name) {
+    case "babel":
+      return import("prettier/plugins/babel");
+    case "estree":
+      return import("prettier/plugins/estree");
+    case "typescript":
+      return import("prettier/plugins/typescript");
+    case "postcss":
+      return import("prettier/plugins/postcss");
+    case "html":
+      return import("prettier/plugins/html");
+    case "markdown":
+      return import("prettier/plugins/markdown");
+    case "yaml":
+      return import("prettier/plugins/yaml");
+    default:
+      throw new Error(`Unknown Prettier plugin: ${name}`);
+  }
+}
+
+async function runPrettier(text: string, languageId: string, options: any): Promise<string> {
+  const spec = PRETTIER_PARSERS[languageId];
+  if (!spec) throw new Error(`Prettier cannot format '${languageId}'`);
+  const prettier: any = await import("prettier/standalone");
+  const plugins = await Promise.all(spec.plugins.map(loadPrettierPlugin));
+  return prettier.format(text, {
+    parser: spec.parser,
+    plugins,
+    tabWidth: options?.tabSize ?? 2,
+    useTabs: false,
+  });
+}
+
+async function runFormatter(
+  providerId: string,
+  text: string,
+  languageId: string,
+  options: any
+): Promise<string> {
+  if (providerId === "builtin:json") {
+    const parsed = JSON.parse(text);
+    return `${JSON.stringify(parsed, null, options?.tabSize ?? 2)}\n`;
+  }
+  if (providerId === "builtin:prettier") {
+    return runPrettier(text, languageId, options);
+  }
+  throw new Error(`Unknown formatter: ${providerId}`);
+}
+
 // ---- Message Handling ------------------------------------------------------
 
-self.onmessage = (event: MessageEvent) => {
+self.onmessage = async (event: MessageEvent) => {
   const { id, method, params } = event.data || {};
   if (!method) return;
+
+  if (method === "formatter/format") {
+    try {
+      const text = await runFormatter(
+        params.providerId,
+        params.text,
+        params.languageId,
+        params.options
+      );
+      self.postMessage({ id, result: { text } });
+    } catch (error: any) {
+      self.postMessage({ id, error: String(error?.message || error) });
+    }
+    return;
+  }
 
   if (method === "textDocument/didOpen") {
     const entry: DocumentEntry = {

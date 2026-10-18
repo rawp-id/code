@@ -373,6 +373,25 @@ export class EditorManager {
     return true;
   }
 
+  /** Replace a whole document with formatted text. Returns false if unchanged. */
+  formatText(path: string, text: string): boolean {
+    const doc = this.docs.get(path);
+    if (!doc) return false;
+    if (this.active === path) {
+      const state = this.view.state;
+      if (state.doc.toString() === text) return false;
+      this.view.dispatch({ changes: { from: 0, to: state.doc.length, insert: text } });
+      return true;
+    }
+    if (doc.state.doc.toString() === text) return false;
+    doc.state = doc.state.update({
+      changes: { from: 0, to: doc.state.doc.length, insert: text },
+    }).state;
+    doc.dirty = doc.state.doc.toString() !== doc.savedContent;
+    this.fire();
+    return true;
+  }
+
   /** Open the completion popup at the cursor (Ctrl+Space). */
   triggerSuggest(): void {
     if (!this.active) return;

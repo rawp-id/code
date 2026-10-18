@@ -8,12 +8,16 @@ export interface Settings {
     autoSave: "off" | "afterDelay" | "onFocusChange";
     autoSaveDelay: number;
     colorTheme: string;
+    formatOnSave: boolean;
+    defaultFormatter: string;
   };
   files: { exclude: string[] };
   search: { exclude: string[]; maxResults: number };
   terminal: { fontSize: number; prompt: string };
   workbench: { sidebarWidth: number; iconTheme: "default" | "minimal" };
   connection?: { serverUrl: string };
+  /** Per-language formatter overrides: languageId -> provider id. */
+  formatters?: { byLanguage: Record<string, string> };
   [key: string]: any;
 }
 
@@ -27,12 +31,15 @@ export const DEFAULT_SETTINGS: Settings = {
     autoSave: "off",
     autoSaveDelay: 1000,
     colorTheme: "dark-plus",
+    formatOnSave: false,
+    defaultFormatter: "",
   },
   files: { exclude: [] },
   search: { exclude: [], maxResults: 1000 },
   terminal: { fontSize: 13, prompt: "\\u@\\h \\w \\$ " },
   workbench: { sidebarWidth: 240, iconTheme: "default" },
   connection: { serverUrl: "ws://localhost:3177/ws" },
+  formatters: { byLanguage: {} },
 };
 
 export function getPath(object: any, dotted: string, fallback?: any): any {

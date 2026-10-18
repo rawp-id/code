@@ -22,4 +22,9 @@ export default defineConfig({
     target: "es2022",
     outDir: "dist",
   },
+  worker: {
+    // Prettier's formatter plugins are lazily code-split inside the language
+    // worker, which requires ES module output instead of the default IIFE.
+    format: "es",
+  },
 });

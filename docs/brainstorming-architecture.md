@@ -139,6 +139,7 @@ flowchart TD
 - [`app/src/worker/client-lsp.ts`](file:///public/code-editor/app/src/worker/client-lsp.ts): Jembatan antara worker bahasa dan CodeMirror.
 - [`app/src/localvfs.ts`](file:///public/code-editor/app/src/localvfs.ts): Virtual file system in-memory/browser saat server tidak terhubung, sekaligus *shim* RPC `fs.*`/`ws.*`/`settings.*`/`ext.*`/`doc.*`/`pty.*`.
 - [`app/src/localfs.ts`](file:///public/code-editor/app/src/localfs.ts): Akses folder nyata di storage perangkat via **File System Access API** (`showDirectoryPicker`) + persistensi handle di IndexedDB.
+- [`app/src/formatters.ts`](file:///public/code-editor/app/src/formatters.ts): Registry formatter + resolusi default gaya VS Code (per-bahasa → global → tunggal → prioritas).
 - [`app/src/settingsview.ts`](file:///public/code-editor/app/src/settingsview.ts): Panel pengaturan terpadu termasuk konfigurasi Server Connection.
 - [`app/src/connect.ts`](file:///public/code-editor/app/src/connect.ts): Helper dialog koneksi yang kini beroperasi secara pasif / non-intrusif.
 - [`app/src/terminal.ts`](file:///public/code-editor/app/src/terminal.ts): Terminal xterm.js yang mendeteksi mode offline lebih awal dan memberi petunjuk koneksi, bukan menunggu timeout.
@@ -172,3 +173,26 @@ Seluruh jalur kode yang tadinya hanya bergantung pada server Node kini memiliki 
 9. **Koneksi & startup**
    - `Bridge.waitForConnection()` memberi server yang berjalan kesempatan menjawab sebelum memutuskan mode offline, menghilangkan balapan saat startup.
    - `setUrl("")` (Disconnect / Work Offline) tidak lagi membuat `WebSocket` tidak valid; tidak ada pop-up koneksi otomatis.
+
+---
+
+## 10. Formatter Registry & Default Formatter (alur VS Code)
+
+Formatter tidak di-hardcode ke editor, melainkan lewat **registry provider** dengan pemilihan default ala VS Code. Implementasi: [`app/src/formatters.ts`](file:///public/code-editor/app/src/formatters.ts), eksekusi di `worker/language-worker.ts`.
+
+1. **Provider** (`FormatterProvider`): `{ id, label, source, languages, priority, kind }`.
+   - `source`: `builtin` | `wasm` | `lsp` | `server-ext` | `client-ext` (menyiapkan jalur plugin/server tanpa bongkar UI).
+   - Bawaan saat ini: `builtin:prettier` (JS/TS/JSON/CSS/SCSS/Less/HTML/Vue/Markdown/YAML) dan `builtin:json` (JSON dasar).
+2. **Resolusi default** (`resolveFormatter`), urut:
+   1. default per-bahasa `formatters.byLanguage[languageId]`
+   2. default global `editor.defaultFormatter`
+   3. hanya satu provider → dipakai
+   4. lebih dari satu → prioritas tertinggi
+   5. tidak ada → `null` → toast "No formatter for '<lang>'"
+3. **Perintah**: `Format Document` (`Shift+Alt+F`), `Format Document With…` (memilih provider lalu menawarkan "Set as default" ke `formatters.byLanguage`), dan `Format Document` di context menu editor.
+4. **Settings** (bagian **Formatters** + **Editor**):
+   - `editor.formatOnSave` (boolean) — format berjalan sebelum `editor.save` (urutan format → save, dengan guard anti re-entrant).
+   - `editor.defaultFormatter` (select: `Auto` + daftar provider).
+   - Tabel per-bahasa untuk override, disimpan sebagai `formatters.byLanguage`.
+5. **Eksekusi**: worker membungkus Prettier (`prettier/standalone` + plugin per-bahasa, dynamic import sehingga hanya dimuat saat dipakai) dan fallback `builtin:json`. `vite.config.ts` memakai `worker.format = "es"` karena plugin di-code-split.
+6. **Jalur lanjutan** (belum): provider WASM (gofmt/clang-format/taplo), LSP `textDocument/formatting`, extension server, dan client extension host tersandbox untuk `registerDocumentFormattingEditProvider`.

@@ -1,6 +1,7 @@
 import type { DirEntry, ServerInfo } from "./bridge";
 import { clientExtensions } from "./client-extensions";
 import { localFolder } from "./localfs";
+import { DEFAULT_SETTINGS } from "./settings";
 
 const STORAGE_KEY = "kode.local_vfs";
 const SETTINGS_KEY = "kode.local_settings";
@@ -291,23 +292,7 @@ export class LocalVfs {
         } catch {
           /* fallback */
         }
-        return {
-          editor: {
-            fontSize: 14,
-            tabSize: 2,
-            wordWrap: "off",
-            lineNumbers: true,
-            highlightActiveLine: true,
-            colorTheme: "dark-plus",
-            autoSave: "off",
-            autoSaveDelay: 1000,
-          },
-          files: { exclude: [] },
-          search: { exclude: [] },
-          terminal: { fontSize: 13 },
-          workbench: { sidebarWidth: 240, iconTheme: "default" },
-          connection: { serverUrl: "ws://localhost:3177/ws" },
-        };
+        return structuredClone(DEFAULT_SETTINGS);
       }
 
       case "settings.update": {

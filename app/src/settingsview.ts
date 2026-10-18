@@ -3,6 +3,13 @@ import { bus } from "./bus";
 import { DEFAULT_SETTINGS, getPath, setPath, type Settings } from "./settings";
 import { SHIKI_THEMES, registerShikiTheme } from "./highlight";
 import { icons, setExtensionIconTheme } from "./icons";
+import {
+  FORMATTERS,
+  configuredFormatterId,
+  formattersFor,
+  languagesWithFormatters,
+  resolveFormatter,
+} from "./formatters";
 
 interface SettingDef {
   id: string;
@@ -103,6 +110,22 @@ const SCHEMA: SettingDef[] = [
     step: 100,
   },
   {
+    id: "editor.formatOnSave",
+    section: "Editor",
+    label: "Format On Save",
+    description: "Run the default formatter before saving a file.",
+    type: "boolean",
+  },
+  {
+    id: "editor.defaultFormatter",
+    section: "Formatters",
+    label: "Default Formatter",
+    description:
+      'Used by Format Document. "Auto" picks the highest priority provider; the per-language rows below override it.',
+    type: "select",
+    options: [],
+  },
+  {
     id: "files.exclude",
     section: "Files",
     label: "Exclude",
@@ -163,7 +186,16 @@ const SCHEMA: SettingDef[] = [
   },
 ];
 
-const SECTIONS = ["Connection", "Themes", "Editor", "Files", "Search", "Terminal", "Workbench"];
+const SECTIONS = [
+  "Connection",
+  "Themes",
+  "Editor",
+  "Formatters",
+  "Files",
+  "Search",
+  "Terminal",
+  "Workbench",
+];
 
 export class SettingsView {
   private searchEl: HTMLInputElement;
@@ -269,6 +301,15 @@ export class SettingsView {
         ...this.extensionIconThemes.map((theme) => ({ value: theme.id, label: theme.label })),
       ];
     }
+    if (def.id === "editor.defaultFormatter") {
+      return [
+        { label: "Auto (highest priority)", value: "" },
+        ...FORMATTERS.map((provider) => ({
+          label: `${provider.label} (${provider.id})`,
+          value: provider.id,
+        })),
+      ];
+    }
     return def.options || [];
   }
 
@@ -343,12 +384,25 @@ export class SettingsView {
             def.id.toLowerCase().includes(query) ||
             section.toLowerCase().includes(query))
       );
-      if (defs.length === 0) continue;
+      const formatterMatch =
+        section === "Formatters" &&
+        Boolean(query) &&
+        ("formatters".includes(query) ||
+          FORMATTERS.some(
+            (provider) =>
+              provider.id.toLowerCase().includes(query) ||
+              provider.label.toLowerCase().includes(query) ||
+              provider.languages.some((language) => language.includes(query))
+          ));
+      if (defs.length === 0 && !formatterMatch) continue;
 
       this.bodyEl.append(this.heading(section));
       for (const def of defs) {
         this.bodyEl.append(this.listRow(def));
         count += 1;
+      }
+      if (section === "Formatters") {
+        count += this.renderFormatterOverrides();
       }
     }
 
@@ -382,6 +436,80 @@ export class SettingsView {
     if (count === 0) {
       this.bodyEl.innerHTML = `<div class="settings-empty">No matching settings</div>`;
     }
+  }
+
+  /** Per-language formatter overrides rendered inline in the Formatters section. */
+  private renderFormatterOverrides(): number {
+    const query = this.searchEl.value.trim().toLowerCase();
+    const languages = languagesWithFormatters().filter(
+      (language) =>
+        !query ||
+        language.includes(query) ||
+        formattersFor(language).some(
+          (provider) =>
+            provider.id.toLowerCase().includes(query) ||
+            provider.label.toLowerCase().includes(query)
+        )
+    );
+
+    let count = 0;
+    for (const language of languages) {
+      const providers = formattersFor(language);
+      const selected = configuredFormatterId(language, this.settings);
+      const resolved = selected || resolveFormatter(language, this.settings)?.provider.id || "";
+
+      const row = document.createElement("div");
+      row.className = "setting-row";
+
+      const info = document.createElement("div");
+      info.className = "setting-info";
+      const label = document.createElement("div");
+      label.className = "setting-label";
+      label.textContent = language;
+      const value = document.createElement("div");
+      value.className = "setting-value";
+      const active = providers.find((provider) => provider.id === resolved);
+      value.textContent = selected
+        ? active?.label ?? selected
+        : `Auto — ${active?.label ?? "none"}`;
+      info.append(label, value);
+
+      const select = document.createElement("select");
+      const options = [
+        { label: "Auto", value: "" },
+        ...providers.map((provider) => ({ label: provider.label, value: provider.id })),
+      ];
+      for (const option of options) {
+        const element = document.createElement("option");
+        element.value = option.value;
+        element.textContent = option.label;
+        if (option.value === selected) element.selected = true;
+        select.append(element);
+      }
+      select.onchange = () => this.setFormatterDefault(language, select.value);
+
+      const control = document.createElement("div");
+      control.className = "setting-control";
+      control.append(select);
+
+      row.append(info, control);
+      this.bodyEl.append(row);
+      count += 1;
+    }
+    return count;
+  }
+
+  /** Persist a per-language formatter choice (`""` clears it back to Auto). */
+  setFormatterDefault(languageId: string, providerId: string): void {
+    const byLanguage: Record<string, string> = {
+      ...(this.settings.formatters?.byLanguage || {}),
+    };
+    if (providerId) byLanguage[languageId] = providerId;
+    else delete byLanguage[languageId];
+    setPath(this.settings, "formatters.byLanguage", byLanguage);
+    this.onChange?.(this.settings);
+    this.save();
+    if (this.mode === "list") this.render();
   }
 
   private renderDetail(id: string): void {
